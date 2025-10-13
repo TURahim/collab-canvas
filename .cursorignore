@@ -1,0 +1,33 @@
+# Cursor Ignore File
+# Files and directories that Cursor AI should not access
+
+# Large directories
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Dependencies
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Build artifacts
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Documentation (keep in version control but not needed for AI)
+# Uncomment if you want AI to ignore these:
+# *.md
+# PRD.md
+# PRD_Summary.md
+# tasklist.md
+
+# Environment files
+# Hide real secrets but allow example env for AI context
+.env
+.env.local
+!.env.local.example

@@ -1,12 +1,49 @@
 "use client";
 
-import { Tldraw } from "@tldraw/tldraw";
+import { Tldraw, Editor } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import { useAuth } from "../hooks/useAuth";
+import { useCursors } from "../hooks/useCursors";
 import AuthModal from "./AuthModal";
+import Cursors from "./Cursors";
+import { useCallback, useState } from "react";
 
 export default function CollabCanvas() {
   const { user, loading, error, setDisplayName } = useAuth();
+  const [editor, setEditor] = useState<Editor | null>(null);
+
+  /**
+   * Editor mount handler - called when tldraw editor is initialized
+   */
+  const handleEditorMount = useCallback((editor: Editor) => {
+    setEditor(editor);
+    
+    // Log editor info for debugging
+    console.log("tldraw Editor mounted:", {
+      currentPage: editor.getCurrentPage()?.id,
+      shapeCount: editor.getCurrentPageShapes().length,
+    });
+
+    // TODO PR6: Set up shape sync with Firestore
+  }, []);
+
+  // Set up real-time cursor tracking
+  const { remoteCursors, isTracking, error: cursorError } = useCursors({
+    editor,
+    userId: user?.uid || null,
+    userName: user?.displayName || null,
+    userColor: user?.color || "#999999",
+    enabled: !!user && !!user.displayName,
+  });
+
+  // Log cursor tracking status
+  if (cursorError) {
+    console.error("Cursor tracking error:", cursorError);
+  }
+  
+  if (isTracking && editor) {
+    console.log("Cursor tracking active. Remote cursors:", Object.keys(remoteCursors).length);
+  }
 
   // Show error state if Firebase is not configured
   if (error && !user) {
@@ -63,7 +100,15 @@ export default function CollabCanvas() {
   // User is authenticated and has a display name - show canvas
   return (
     <div className="fixed inset-0">
-      <Tldraw />
+      <Tldraw onMount={handleEditorMount} />
+      <Cursors editor={editor} remoteCursors={remoteCursors} />
+      
+      {/* Cursor tracking status indicator */}
+      {isTracking && (
+        <div className="fixed bottom-4 left-4 z-50 rounded-lg bg-green-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
+          🟢 Cursor tracking active
+        </div>
+      )}
     </div>
   );
 }

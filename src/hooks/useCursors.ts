@@ -1,0 +1,189 @@
+/**
+ * useCursors Hook
+ * Manages real-time cursor tracking and synchronization
+ */
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Editor } from "@tldraw/tldraw";
+import { UserPresence } from "../types";
+import {
+  updateCursorPosition,
+  updateUserPresence,
+  listenToUsers,
+  markUserOffline,
+  setupPresenceHeartbeat,
+} from "../lib/realtimeSync";
+import { screenToPage } from "../lib/tldrawHelpers";
+import { throttle } from "../lib/tldrawHelpers";
+
+interface UseCursorsOptions {
+  editor: Editor | null;
+  userId: string | null;
+  userName: string | null;
+  userColor: string;
+  enabled?: boolean;
+}
+
+interface UseCursorsReturn {
+  remoteCursors: Record<string, UserPresence>;
+  isTracking: boolean;
+  error: Error | null;
+}
+
+/**
+ * Hook to track and sync cursor positions across users
+ * - Tracks local mouse movement and sends to Realtime DB (30Hz)
+ * - Listens to other users' cursor positions
+ * - Manages presence (online/offline status)
+ * - Auto-cleanup on unmount
+ */
+export function useCursors({
+  editor,
+  userId,
+  userName,
+  userColor,
+  enabled = true,
+}: UseCursorsOptions): UseCursorsReturn {
+  const [remoteCursors, setRemoteCursors] = useState<Record<string, UserPresence>>({});
+  const [isTracking, setIsTracking] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Throttled cursor update function (30Hz = every 33ms)
+  const throttledUpdateCursor = useRef(
+    throttle((userId: string, cursor: { x: number; y: number }) => {
+      updateCursorPosition(userId, cursor).catch((err) => {
+        console.error("Failed to update cursor:", err);
+      });
+    }, 33)
+  ).current;
+
+  /**
+   * Handle pointer move events from tldraw
+   */
+  const handlePointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (!editor || !userId || !enabled) return;
+
+      try {
+        // Convert screen coordinates to page coordinates
+        const pagePoint = screenToPage(editor, {
+          x: e.clientX,
+          y: e.clientY,
+        });
+
+        // Send to Realtime DB (throttled)
+        throttledUpdateCursor(userId, pagePoint);
+      } catch (err) {
+        console.error("Error handling pointer move:", err);
+      }
+    },
+    [editor, userId, enabled, throttledUpdateCursor]
+  );
+
+  /**
+   * Set up cursor tracking on editor container
+   */
+  useEffect(() => {
+    if (!editor || !userId || !userName || !enabled) {
+      setIsTracking(false);
+      return;
+    }
+
+    try {
+      // Get the editor container element
+      const container = editor.getContainer();
+      
+      if (!container) {
+        console.warn("Editor container not found");
+        return;
+      }
+
+      // Add pointer move listener
+      container.addEventListener("pointermove", handlePointerMove);
+      setIsTracking(true);
+
+      // Cleanup
+      return () => {
+        container.removeEventListener("pointermove", handlePointerMove);
+        setIsTracking(false);
+      };
+    } catch (err) {
+      console.error("Error setting up cursor tracking:", err);
+      setError(err as Error);
+      setIsTracking(false);
+    }
+  }, [editor, userId, userName, enabled, handlePointerMove]);
+
+  /**
+   * Set up user presence and listen to other users
+   */
+  useEffect(() => {
+    if (!userId || !userName || !enabled) {
+      return;
+    }
+
+    let mounted = true;
+
+    const setupPresence = async () => {
+      try {
+        // Update user presence in Realtime DB
+        await updateUserPresence(userId, userName, userColor);
+
+        // Set up heartbeat to maintain presence
+        heartbeatIntervalRef.current = setupPresenceHeartbeat(userId);
+
+        // Listen to all users' cursors
+        if (mounted) {
+          unsubscribeRef.current = listenToUsers((users) => {
+            if (!mounted) return;
+            
+            // Filter out current user
+            const { [userId]: _currentUser, ...others } = users;
+            setRemoteCursors(others);
+          });
+        }
+      } catch (err) {
+        console.error("Error setting up presence:", err);
+        if (mounted) {
+          setError(err as Error);
+        }
+      }
+    };
+
+    setupPresence();
+
+    // Cleanup on unmount
+    return () => {
+      mounted = false;
+
+      // Clear heartbeat
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+
+      // Unsubscribe from listeners
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+
+      // Mark user as offline
+      if (userId) {
+        markUserOffline(userId).catch((err) => {
+          console.error("Error marking user offline:", err);
+        });
+      }
+    };
+  }, [userId, userName, userColor, enabled]);
+
+  return {
+    remoteCursors,
+    isTracking,
+    error,
+  };
+}
+

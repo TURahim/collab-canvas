@@ -31,5 +31,5 @@ export const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfi
 // Initialize Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app); // Firestore for shapes
-export const rtdb = getDatabase(app); // Realtime Database for cursors
+export const realtimeDb = getDatabase(app); // Realtime Database for cursors
 

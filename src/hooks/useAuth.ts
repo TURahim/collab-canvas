@@ -11,7 +11,7 @@ import {
   User as FirebaseUser 
 } from "firebase/auth";
 import { ref, set, onDisconnect, serverTimestamp } from "firebase/database";
-import { auth, rtdb } from "../lib/firebase";
+import { auth, realtimeDb } from "../lib/firebase";
 import { generateColorFromString } from "../lib/utils";
 import { User, AuthState } from "../types";
 
@@ -135,7 +135,7 @@ export function useAuth(): AuthState & {
 async function writeUserToDatabase(userData: User): Promise<void> {
   try {
     console.log("Writing user to database:", userData.uid);
-    const userRef = ref(rtdb, `users/${userData.uid}`);
+    const userRef = ref(realtimeDb, `users/${userData.uid}`);
 
     // Write user data
     await set(userRef, {
@@ -149,11 +149,11 @@ async function writeUserToDatabase(userData: User): Promise<void> {
     console.log("User data written successfully");
 
     // Set up presence: mark user as offline when disconnected
-    const disconnectRef = ref(rtdb, `users/${userData.uid}/online`);
+    const disconnectRef = ref(realtimeDb, `users/${userData.uid}/online`);
     await onDisconnect(disconnectRef).set(false);
 
     // Also update lastSeen on disconnect
-    const lastSeenRef = ref(rtdb, `users/${userData.uid}/lastSeen`);
+    const lastSeenRef = ref(realtimeDb, `users/${userData.uid}/lastSeen`);
     await onDisconnect(lastSeenRef).set(serverTimestamp());
 
     console.log("Presence handlers set up successfully");

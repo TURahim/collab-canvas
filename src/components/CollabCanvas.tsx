@@ -7,6 +7,7 @@ import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
+import UserList from "./UserList";
 import { useCallback, useState } from "react";
 
 export default function CollabCanvas() {
@@ -117,6 +118,11 @@ export default function CollabCanvas() {
     <div className="fixed inset-0">
       <Tldraw onMount={handleEditorMount} />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
+      <UserList
+        currentUserId={user?.uid || null}
+        currentUserName={user?.displayName || null}
+        currentUserColor={user?.color || "#999999"}
+      />
       
       {/* Status indicators */}
       <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-2">

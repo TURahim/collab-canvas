@@ -4,6 +4,7 @@ import { Tldraw, Editor } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import { useAuth } from "../hooks/useAuth";
 import { useCursors } from "../hooks/useCursors";
+import { useShapes } from "../hooks/useShapes";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
 import { useCallback, useState } from "react";
@@ -23,8 +24,6 @@ export default function CollabCanvas() {
       currentPage: editor.getCurrentPage()?.id,
       shapeCount: editor.getCurrentPageShapes().length,
     });
-
-    // TODO PR6: Set up shape sync with Firestore
   }, []);
 
   // Set up real-time cursor tracking
@@ -36,13 +35,29 @@ export default function CollabCanvas() {
     enabled: !!user && !!user.displayName,
   });
 
-  // Log cursor tracking status
+  // Set up real-time shape synchronization
+  const { isSyncing, error: shapeError } = useShapes({
+    editor,
+    userId: user?.uid || null,
+    roomId: "default",
+    enabled: !!user && !!user.displayName,
+  });
+
+  // Log tracking status
   if (cursorError) {
     console.error("Cursor tracking error:", cursorError);
   }
   
+  if (shapeError) {
+    console.error("Shape sync error:", shapeError);
+  }
+  
   if (isTracking && editor) {
     console.log("Cursor tracking active. Remote cursors:", Object.keys(remoteCursors).length);
+  }
+  
+  if (isSyncing) {
+    console.log("Shape sync active");
   }
 
   // Show error state if Firebase is not configured
@@ -103,12 +118,19 @@ export default function CollabCanvas() {
       <Tldraw onMount={handleEditorMount} />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       
-      {/* Cursor tracking status indicator */}
-      {isTracking && (
-        <div className="fixed bottom-4 left-4 z-50 rounded-lg bg-green-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
-          🟢 Cursor tracking active
-        </div>
-      )}
+      {/* Status indicators */}
+      <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-2">
+        {isTracking && (
+          <div className="rounded-lg bg-green-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
+            🟢 Cursor tracking active
+          </div>
+        )}
+        {isSyncing && (
+          <div className="rounded-lg bg-blue-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
+            🔄 Syncing shapes...
+          </div>
+        )}
+      </div>
     </div>
   );
 }

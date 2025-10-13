@@ -39,7 +39,7 @@ export default function UserList({
   }
 
   return (
-    <div className="fixed right-4 top-4 z-50 w-64">
+    <div className="fixed left-4 top-4 z-50 w-64">
       <div className="rounded-lg bg-white shadow-xl border border-gray-200">
         {/* Header */}
         <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 rounded-t-lg">

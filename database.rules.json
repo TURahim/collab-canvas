@@ -4,7 +4,22 @@
       ".read": "auth != null",
       "$uid": {
         ".read": "auth != null",
-        ".write": "$uid === auth.uid"
+        ".write": "$uid === auth.uid",
+        "online": {
+          ".write": "$uid === auth.uid"
+        },
+        "lastSeen": {
+          ".write": "$uid === auth.uid"
+        },
+        "name": {
+          ".write": "$uid === auth.uid"
+        },
+        "color": {
+          ".write": "$uid === auth.uid"
+        },
+        "cursor": {
+          ".write": "$uid === auth.uid"
+        }
       }
     }
   }

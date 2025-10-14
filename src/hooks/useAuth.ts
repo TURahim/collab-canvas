@@ -4,7 +4,7 @@
  */
 
 import type { User as FirebaseUser } from "firebase/auth";
-import { onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import { onAuthStateChanged, signInAnonymously, updateProfile, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { onDisconnect, ref, serverTimestamp, set } from "firebase/database";
 import { useEffect, useState } from "react";
 
@@ -58,6 +58,17 @@ export function useAuth(): UseAuthReturn {
           // If user has a display name, write to Realtime Database
           if (firebaseUser.displayName) {
             await writeUserToDatabase(userData);
+          }
+        } else {
+          // User is signed out - sign in anonymously
+          console.log("[useAuth] No user, signing in anonymously");
+          try {
+            const result = await signInAnonymously(auth);
+            console.log("[useAuth] Anonymous sign-in successful:", result.user.uid);
+            // onAuthStateChanged will be called again with the new user
+          } catch (signInErr) {
+            console.error("[useAuth] Anonymous sign-in failed:", signInErr);
+            setError(signInErr instanceof Error ? signInErr : new Error("Failed to sign in"));
           }
         }
       } catch (err) {
@@ -159,11 +170,43 @@ export function useAuth(): UseAuthReturn {
   };
 
   const signOutUser = async (): Promise<void> => {
+    if (!auth.currentUser) {
+      console.warn("[useAuth] No user to sign out");
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+      
+      const userId = auth.currentUser.uid;
+      
+      // Mark user as offline in database before signing out
+      // Note: We update specific fields rather than overwriting the entire user object
+      // This must happen BEFORE signOut() while the user is still authenticated
+      try {
+        const onlineRef = ref(realtimeDb, `users/${userId}/online`);
+        const lastSeenRef = ref(realtimeDb, `users/${userId}/lastSeen`);
+        
+        await set(onlineRef, false);
+        await set(lastSeenRef, serverTimestamp());
+        console.log("[useAuth] User marked as offline in database");
+      } catch (dbErr) {
+        // Silently continue - onDisconnect() handlers will clean up if this fails
+        // This can happen if user is already disconnected or has no internet
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[useAuth] Could not update database on logout (continuing anyway):", dbErr);
+        }
+      }
+      
+      // Sign out from Firebase Auth
       await signOut(auth);
+      console.log("[useAuth] User signed out successfully");
+      
+      // Clear local state (this will also be done by onAuthStateChanged)
+      setUser(null);
     } catch (err) {
+      console.error("[useAuth] Sign out error:", err);
       const error = err instanceof Error ? err : new Error("Sign out failed");
       setError(error);
       throw error;

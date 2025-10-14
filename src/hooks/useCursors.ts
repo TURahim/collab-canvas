@@ -197,12 +197,12 @@ export function useCursors({
         unsubscribeRef.current = null;
       }
 
-      // Mark user as offline on disconnect
-      if (userId) {
-        markUserOffline(userId).catch((err) => {
-          console.error("[useCursors] Error marking user offline:", err);
-        });
-      }
+      // Note: We don't call markUserOffline() here because:
+      // 1. Firebase onDisconnect() handlers already handle this automatically
+      // 2. If user is logging out, signOutUser() already marks them offline
+      // 3. Calling it here would cause permission errors after sign-out
+      // The onDisconnect() handlers in writeUserToDatabase() ensure the user
+      // is marked offline when they close the tab or lose connection
     };
   }, [userId, userName, userColor, enabled]);
 

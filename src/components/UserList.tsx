@@ -6,6 +6,7 @@
 "use client";
 
 import { usePresence } from "../hooks/usePresence";
+import { useAuth } from "../hooks/useAuth";
 
 /**
  * Props for UserList component
@@ -34,6 +35,7 @@ export default function UserList({
   currentUserName,
   currentUserColor,
 }: UserListProps): React.JSX.Element | null {
+  const { signOutUser } = useAuth();
   const { onlineUsers, currentUser, userCount, error } = usePresence({
     currentUserId,
     enabled: !!currentUserId,
@@ -47,8 +49,17 @@ export default function UserList({
     return null;
   }
 
+  const handleLogout = async (): Promise<void> => {
+    try {
+      await signOutUser();
+    } catch (err) {
+      console.error("[UserList] Logout failed:", err);
+      // Error is already handled in useAuth, just log here
+    }
+  };
+
   return (
-    <div className="fixed left-4 top-20 z-10 w-64 pointer-events-auto">
+    <div className="fixed left-4 top-20 z-[100] w-64 pointer-events-auto">
       <div className="rounded-lg bg-white shadow-xl border border-gray-200">
         {/* Header */}
         <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 rounded-t-lg">
@@ -82,6 +93,13 @@ export default function UserList({
                   <span className="inline-flex items-center rounded-full bg-blue-500 px-2 py-0.5 text-xs font-medium text-white">
                     You
                   </span>
+                  <button
+                    onClick={() => void handleLogout()}
+                    className="ml-auto rounded-md border border-blue-200 px-2 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50 transition-colors"
+                    aria-label="Logout"
+                  >
+                    Logout
+                  </button>
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
                   <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />

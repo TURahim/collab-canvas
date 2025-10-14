@@ -163,7 +163,15 @@ export function listenToShapes(
   };
 
   const handleError = (error: Error): void => {
-    console.error("[FirestoreSync] Error listening to shapes:", error);
+    // Permission denied errors are expected when user signs out
+    // The listener is cleaned up immediately after, so we silently ignore these
+    if (error.message?.includes("Missing or insufficient permissions") || error.message?.includes("permission")) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[FirestoreSync] Shape listener permission denied (expected during sign-out)");
+      }
+    } else {
+      console.error("[FirestoreSync] Error listening to shapes:", error);
+    }
   };
 
   const unsubscribe = onSnapshot(shapesQuery, handleSnapshot, handleError);

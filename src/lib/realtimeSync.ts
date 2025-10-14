@@ -75,6 +75,11 @@ export async function updateCursorPosition(
       lastSeen: serverTimestamp(),
     });
   } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      // Silently ignore - user is signing out or auth revoked
+      return;
+    }
     console.error("[RealtimeSync] Error updating cursor position:", error);
   }
 }
@@ -121,6 +126,11 @@ export async function updateUserPresence(
       await onDisconnect(cursorRef).remove();
     });
   } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      // Silently ignore - user is signing out or auth revoked
+      return;
+    }
     console.error("[RealtimeSync] Error updating user presence:", error);
   }
 }
@@ -147,6 +157,11 @@ export async function markUserOffline(userId: string): Promise<void> {
 
     await remove(cursorRef);
   } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      // Silently ignore - user is signing out or auth revoked
+      return;
+    }
     console.error("[RealtimeSync] Error marking user offline:", error);
   }
 }
@@ -184,7 +199,15 @@ export function listenToUsers(
   };
 
   const handleError = (error: Error): void => {
-    console.error("[RealtimeSync] Error listening to users:", error);
+    // Permission denied errors are expected when user signs out
+    // The listener is cleaned up immediately after, so we silently ignore these
+    if (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission")) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[RealtimeSync] User listener permission denied (expected during sign-out)");
+      }
+    } else {
+      console.error("[RealtimeSync] Error listening to users:", error);
+    }
     callback({});
   };
 
@@ -250,7 +273,14 @@ export async function getOnlineUsers(): Promise<Record<string, UserPresence>> {
 
     return onlineUsers;
   } catch (error) {
-    console.error("[RealtimeSync] Error getting online users:", error);
+    // Permission denied errors are expected when user signs out or auth isn't ready
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[RealtimeSync] Get online users permission denied (expected during sign-out or before auth)");
+      }
+    } else {
+      console.error("[RealtimeSync] Error getting online users:", error);
+    }
     return {};
   }
 }

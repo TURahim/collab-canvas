@@ -1,7 +1,7 @@
 "use client";
 
-import { Tldraw, Editor } from "tldraw";
-import "tldraw/tldraw.css";
+import { Tldraw, Editor } from "@tldraw/tldraw";
+import "@tldraw/tldraw/tldraw.css";
 import { useAuth } from "../hooks/useAuth";
 import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
@@ -150,4 +150,3 @@ export default function CollabCanvas() {
     </div>
   );
 }
-

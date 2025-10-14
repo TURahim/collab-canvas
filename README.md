@@ -589,7 +589,7 @@ MIT License - See LICENSE file for details
 7. ✅ **Type safety issues** - Removed unsafe casts, proper generics
 8. ✅ **Build failures** - Fixed all ESLint warnings
 9. ✅ **UserList overlap** - Adjusted position to clear tldraw menu
-10. ✅ **Cursor tracking broken post-refactor** - Fixed tldraw event name from `"pointer-move"` to `"pointermove"` (no hyphen) for v2+ compatibility
+10. ✅ **Cursor tracking broken post-refactor** - Fixed by switching from `editor.on()` to DOM events with `container.addEventListener()` for tldraw v4 compatibility
 
 ### **Current Limitations:**
 - Images disappear on refresh (asset persistence not implemented in MVP)

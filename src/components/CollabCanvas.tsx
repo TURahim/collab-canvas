@@ -19,6 +19,17 @@ export default function CollabCanvas() {
    */
   useEffect(() => {
     console.log('[Tldraw] Component mounted');
+    const licenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
+    if (licenseKey) {
+      const masked = `${licenseKey.slice(0, 2)}***${licenseKey.slice(-4)}`;
+      console.log('[Tldraw] License key detected:', {
+        present: true,
+        length: licenseKey.length,
+        masked,
+      });
+    } else {
+      console.warn('[Tldraw] License key missing. Set NEXT_PUBLIC_TLDRAW_LICENSE_KEY in env.');
+    }
     return () => console.log('[Tldraw] Component unmounted');
   }, []);
 
@@ -120,7 +131,7 @@ export default function CollabCanvas() {
   // User is authenticated and has a display name - show canvas
   return (
     <div className="fixed inset-0">
-      <Tldraw onMount={handleEditorMount} />
+      <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList
         currentUserId={user?.uid || null}

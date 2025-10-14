@@ -106,13 +106,14 @@ export function useCursors({
       };
 
       // Listen to pointer move events via tldraw's event system
-      // Using type assertion to bypass strict event map typing
-      (editor as any).on("pointer-move", handlePointerMove);
+      // Note: tldraw v2+ uses "pointermove" (no hyphen), not "pointer-move"
+      // Using type assertion as tldraw's event types don't expose this event in TLEventMap
+      (editor as any).on("pointermove", handlePointerMove);
       setIsTracking(true);
 
       // Cleanup
       return (): void => {
-        (editor as any).off("pointer-move", handlePointerMove);
+        (editor as any).off("pointermove", handlePointerMove);
         setIsTracking(false);
       };
     } catch (err) {

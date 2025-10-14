@@ -61,31 +61,10 @@ export function useCursors({
     }, 33)
   ).current as (userId: string, cursor: { x: number; y: number }) => void;
 
-  /**
-   * Handle pointer move events from tldraw
-   */
-  const handlePointerMove = useCallback(
-    (e: PointerEvent) => {
-      if (!editor || !userId || !enabled) return;
-
-      try {
-        // Convert screen coordinates to page coordinates
-        const pagePoint = screenToPage(editor, {
-          x: e.clientX,
-          y: e.clientY,
-        });
-
-        // Send to Realtime DB (throttled)
-        throttledUpdateCursor(userId, pagePoint);
-      } catch (err) {
-        console.error("Error handling pointer move:", err);
-      }
-    },
-    [editor, userId, enabled, throttledUpdateCursor]
-  );
 
   /**
-   * Set up cursor tracking on editor container
+   * Set up cursor tracking using tldraw's pointer event system
+   * This doesn't interfere with tldraw's native UI
    */
   useEffect(() => {
     if (!editor || !userId || !userName || !enabled) {
@@ -94,21 +73,26 @@ export function useCursors({
     }
 
     try {
-      // Get the editor container element
-      const container = editor.getContainer();
-      
-      if (!container) {
-        console.warn("Editor container not found");
-        return;
-      }
+      // Use tldraw's pointer event listener instead of DOM events
+      // This integrates properly with tldraw's event system
+      const handlePointer = (info: any) => {
+        if (!info.point) return;
+        
+        try {
+          // The point is already in page coordinates from tldraw
+          throttledUpdateCursor(userId, info.point);
+        } catch (err) {
+          console.error("Error updating cursor:", err);
+        }
+      };
 
-      // Add pointer move listener
-      container.addEventListener("pointermove", handlePointerMove);
+      // Listen to pointer move via tldraw's event system
+      editor.on("pointer-move" as any, handlePointer);
       setIsTracking(true);
 
       // Cleanup
       return () => {
-        container.removeEventListener("pointermove", handlePointerMove);
+        editor.off("pointer-move" as any, handlePointer);
         setIsTracking(false);
       };
     } catch (err) {
@@ -116,7 +100,7 @@ export function useCursors({
       setError(err as Error);
       setIsTracking(false);
     }
-  }, [editor, userId, userName, enabled, handlePointerMove]);
+  }, [editor, userId, userName, enabled, throttledUpdateCursor]);
 
   /**
    * Set up user presence and listen to other users

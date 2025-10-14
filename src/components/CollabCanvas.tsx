@@ -8,7 +8,7 @@ import { useShapes } from "../hooks/useShapes";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
 import UserList from "./UserList";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 
 export default function CollabCanvas() {
   const { user, loading, error, setDisplayName } = useAuth();
@@ -44,22 +44,18 @@ export default function CollabCanvas() {
     enabled: !!user && !!user.displayName,
   });
 
-  // Log tracking status
-  if (cursorError) {
-    console.error("Cursor tracking error:", cursorError);
-  }
-  
-  if (shapeError) {
-    console.error("Shape sync error:", shapeError);
-  }
-  
-  if (isTracking && editor) {
-    console.log("Cursor tracking active. Remote cursors:", Object.keys(remoteCursors).length);
-  }
-  
-  if (isSyncing) {
-    console.log("Shape sync active");
-  }
+  // Log errors only (moved to useEffect to prevent re-render spam)
+  useEffect(() => {
+    if (cursorError) {
+      console.error("Cursor tracking error:", cursorError);
+    }
+  }, [cursorError]);
+
+  useEffect(() => {
+    if (shapeError) {
+      console.error("Shape sync error:", shapeError);
+    }
+  }, [shapeError]);
 
   // Show error state if Firebase is not configured
   if (error && !user) {

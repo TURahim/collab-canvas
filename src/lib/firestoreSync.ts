@@ -63,6 +63,13 @@ export async function writeShapeToFirestore(
   userId: string
 ): Promise<void> {
   try {
+    console.log('[FirestoreSync] Writing shape to Firestore:', {
+      shapeId: shape.id,
+      type: shape.type,
+      roomId,
+      path: `rooms/${roomId}/shapes/${shape.id}`,
+    });
+    
     await withRetry(async (): Promise<void> => {
       const shapeRef = doc(db, `rooms/${roomId}/shapes`, shape.id);
       
@@ -88,9 +95,11 @@ export async function writeShapeToFirestore(
         },
         { merge: true }
       );
+      
+      console.log('[FirestoreSync] ✅ Shape written successfully:', shape.id);
     });
   } catch (error) {
-    console.error("[FirestoreSync] Error writing shape:", error);
+    console.error("[FirestoreSync] ❌ Error writing shape:", error);
     throw error;
   }
 }

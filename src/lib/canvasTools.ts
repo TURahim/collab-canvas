@@ -6,6 +6,7 @@
  */
 
 import type { Editor, TLShapeId } from '@tldraw/tldraw';
+import { toRichText } from '@tldraw/tldraw';
 import { nanoid } from 'nanoid';
 
 /**
@@ -250,24 +251,22 @@ export function createTextShape(
   }
 
   // Create the text shape
-  // Note: tldraw v4 has issues with programmatically setting text content
-  // We'll create a geo shape with text instead, which is more reliable
-  editor.createShape({
+  // Create text shape using richText format (tldraw v4 requirement)
+  // Note: Since tldraw text is left-aligned by default, we adjust the x position
+  // Using 3.0 shifts the box left so left-aligned text appears more centered
+  editor.createShapes([{
     id: shapeId,
-    type: 'geo',
-    x: posX - estimatedWidth / 2,
+    type: 'text',
+    x: posX - estimatedWidth / 3,
     y: posY - textFontSize / 2,
     props: {
-      geo: 'rectangle',
-      w: estimatedWidth,
-      h: textFontSize * 2,
+      richText: toRichText(text.trim()),
       size: tlSize,
-      color: 'white', // Transparent background
-      fill: 'none',
-      dash: 'draw',
-      text: text.trim(), // Text works in geo shapes
+      color: tlColor,
+      w: estimatedWidth,
+      autoSize: false,
     },
-  });
+  }]);
 
   // Select the created shape
   editor.select(shapeId);
@@ -883,12 +882,15 @@ export function createMultiShapeLayout(
 /**
  * Create a login form interface
  * 
- * Creates 5 shapes:
- * 1. Background rectangle (300x300, light-blue)
- * 2. Title text ("Login", size: 32)
- * 3. Username input field (250x40, white)
- * 4. Password input field (250x40, white)
- * 5. Submit button (150x40, blue)
+ * Creates 8 shapes:
+ * 1. Background rectangle (320x380, light-blue)
+ * 2. Title text ("Login", size: 32, black, centered)
+ * 3. Username label text ("Username:", size: 16, black, left-aligned)
+ * 4. Username input field (260x40, grey fill)
+ * 5. Password label text ("Password:", size: 16, black, left-aligned)
+ * 6. Password input field (260x40, grey fill)
+ * 7. Submit button (180x45, blue)
+ * 8. Submit button text ("Submit", size: 18, black for contrast)
  * 
  * @param editor - tldraw editor instance
  * @returns Array of created shape IDs
@@ -898,58 +900,91 @@ export function createLoginForm(editor: Editor): TLShapeId[] {
     throw new Error('Editor is required');
   }
 
-  console.log('[createLoginForm] Creating login form with 5 shapes');
+  console.log('[createLoginForm] Creating login form with 8 shapes (with labels)');
 
   const center = getViewportCenter(editor);
   
-  // Define the 5 shapes for the login form
+  // Define the 8 shapes for a proper login form
   const shapes: ShapeDefinition[] = [
-    // 1. Background rectangle (300x300, light-blue)
+    // 1. Background rectangle (320x380, light-blue)
     {
       shapeType: 'rectangle',
       x: center.x,
       y: center.y,
-      width: 300,
-      height: 300,
+      width: 320,
+      height: 380,
       color: 'light-blue',
     },
-    // 2. Title text ("Login", size: 32)
+    // 2. Title text ("Login", size: 32, bold)
     {
       shapeType: 'text',
       x: center.x,
-      y: center.y - 100,
+      y: center.y - 145,
       width: 200,
       height: 50,
       text: 'Login',
       fontSize: 32,
       color: 'black',
     },
-    // 3. Username input field (250x40, white with grey border)
+    // 3. Username label text (positioned above input field, left-aligned)
     {
-      shapeType: 'rectangle',
-      x: center.x,
-      y: center.y - 30,
-      width: 250,
-      height: 40,
-      color: 'grey',
-    },
-    // 4. Password input field (250x40, white with grey border)
-    {
-      shapeType: 'rectangle',
-      x: center.x,
-      y: center.y + 30,
-      width: 250,
-      height: 40,
-      color: 'grey',
-    },
-    // 5. Submit button (150x40, blue)
-    {
-      shapeType: 'rectangle',
-      x: center.x,
-      y: center.y + 90,
+      shapeType: 'text',
+      x: center.x - 55,
+      y: center.y - 90,
       width: 150,
+      height: 25,
+      text: 'Username:',
+      fontSize: 16,
+      color: 'black',
+    },
+    // 4. Username input field (light grey background for better visibility)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y - 53,
+      width: 260,
       height: 40,
+      color: 'grey',
+    },
+    // 5. Password label text (positioned above input field, left-aligned)
+    {
+      shapeType: 'text',
+      x: center.x - 55,
+      y: center.y + 0,
+      width: 150,
+      height: 25,
+      text: 'Password:',
+      fontSize: 16,
+      color: 'black',
+    },
+    // 6. Password input field (light grey background for better visibility)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y + 40,
+      width: 260,
+      height: 40,
+      color: 'grey',
+    },
+    // 7. Submit button (blue with rounded corners)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y + 110,
+      width: 180,
+      height: 45,
       color: 'blue',
+    },
+    // 8. Submit button text (black for better contrast)
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y + 110,
+      width: 120,
+      height: 30,
+      text: 'Submit',
+      fontSize: 18,
+      color: 'black',
     },
   ];
 

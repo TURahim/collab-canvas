@@ -14,7 +14,7 @@ import type { Message } from '@/types/ai';
 import { ChatMessage } from './ChatMessage';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { executeAICommand, parseAIError } from '@/lib/aiService';
-import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid } from '@/lib/canvasTools';
+import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid, createLoginForm, createCard, createNavigationBar } from '@/lib/canvasTools';
 
 interface FloatingChatProps {
   editor: Editor | null;
@@ -270,14 +270,35 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               }
               break;
               
-            case 'createLoginForm':
+        case 'createLoginForm':
+          {
+            const loginFormIds = createLoginForm(editor);
+            addMessage('system', `✅ Created login form with ${loginFormIds.length} components (background, title, username label & field, password label & field, submit button with text)`);
+          }
+          break;
+              
             case 'createCard':
+              {
+                const cardIds = createCard(editor, {
+                  title: (args as any).title as string | undefined,
+                  subtitle: (args as any).subtitle as string | undefined,
+                  color: (args as any).color as string | undefined,
+                });
+                const title = (args as any).title || 'Card Title';
+                addMessage('system', `✅ Created card layout: "${title}" (${cardIds.length} components)`);
+              }
+              break;
+              
             case 'createNavigationBar':
-              // Complex UI commands temporarily disabled
-              addMessage(
-                'system',
-                '🚧 Complex UI commands (login forms, cards, navigation bars) will be added in a future update! For now, try shapes, grids, move, transform, and arrange commands!'
-              );
+              {
+                const navBarIds = createNavigationBar(editor, {
+                  menuItems: (args as any).menuItems as string[] | undefined,
+                  logoText: (args as any).logoText as string | undefined,
+                  color: (args as any).color as string | undefined,
+                });
+                const menuItems = (args as any).menuItems || ['Home', 'About', 'Services', 'Contact'];
+                addMessage('system', `✅ Created navigation bar with ${menuItems.length} menu items (${navBarIds.length} components)`);
+              }
               break;
               
             default:

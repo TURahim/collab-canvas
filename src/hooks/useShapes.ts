@@ -3,7 +3,7 @@
  * Manages real-time shape synchronization between tldraw and Firestore
  */
 
-import type { Editor, TLShape, TLStoreEventInfo } from "@tldraw/tldraw";
+import type { Editor, TLShape, TLShapeId, TLStoreEventInfo } from "@tldraw/tldraw";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -49,6 +49,7 @@ export function useShapes({
   enabled = true,
 }: UseShapesOptions): UseShapesReturn {
   const isSyncingRef = useRef<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const pendingShapesRef = useRef<Map<string, TLShape>>(new Map());
@@ -81,9 +82,12 @@ export function useShapes({
     const loadInitialShapes = async (): Promise<void> => {
       try {
         isSyncingRef.current = true;
+        setIsSyncing(true);
         const shapes = await getAllShapes(roomId);
 
         if (!isMounted) {
+          isSyncingRef.current = false;
+          setIsSyncing(false);
           return;
         }
 
@@ -95,18 +99,22 @@ export function useShapes({
               editor.createShape(tldrawShape as TLShape);
             } catch (err) {
               // Shape might already exist or be invalid
-              console.warn("[useShapes] Could not create shape:", err);
+              if (process.env.NODE_ENV === "development") {
+                console.warn("[useShapes] Could not create shape:", err);
+              }
             }
           });
         });
 
         isSyncingRef.current = false;
+        setIsSyncing(false);
       } catch (err) {
         console.error("[useShapes] Error loading initial shapes:", err);
         if (isMounted) {
           setError(err instanceof Error ? err : new Error("Failed to load shapes"));
         }
         isSyncingRef.current = false;
+        setIsSyncing(false);
       }
     };
 
@@ -197,26 +205,30 @@ export function useShapes({
 
       // Apply remote changes to editor
       isSyncingRef.current = true;
+      setIsSyncing(true);
 
       editor.store.mergeRemoteChanges(() => {
         // Handle added shapes
         added.forEach((firestoreShape) => {
           // Skip if this is our own pending change
           if (pendingShapesRef.current.has(firestoreShape.id)) {
+            pendingShapesRef.current.delete(firestoreShape.id);
             return;
           }
 
           const tldrawShape = firestoreShapeToTldraw(firestoreShape);
           try {
             // Check if shape already exists
-            const existing = editor.getShape(firestoreShape.id);
+            const existing = editor.getShape(firestoreShape.id as TLShapeId);
             if (existing) {
               editor.updateShape(tldrawShape as TLShape);
             } else {
               editor.createShape(tldrawShape as TLShape);
             }
           } catch (err) {
-            console.warn("[useShapes] Could not add shape:", err);
+            if (process.env.NODE_ENV === "development") {
+              console.warn("[useShapes] Could not add shape:", err);
+            }
           }
         });
 
@@ -224,42 +236,45 @@ export function useShapes({
         modified.forEach((firestoreShape) => {
           // Skip if this is our own pending change
           if (pendingShapesRef.current.has(firestoreShape.id)) {
+            pendingShapesRef.current.delete(firestoreShape.id);
             return;
           }
 
           const tldrawShape = firestoreShapeToTldraw(firestoreShape);
           try {
-            editor.updateShape(tldrawShape);
+            editor.updateShape(tldrawShape as TLShape);
           } catch (err) {
-            console.warn("[useShapes] Could not update shape:", err);
+            if (process.env.NODE_ENV === "development") {
+              console.warn("[useShapes] Could not update shape:", err);
+            }
           }
         });
 
         // Handle removed shapes
         removed.forEach((shapeId) => {
           try {
-            editor.deleteShape(shapeId);
+            editor.deleteShape(shapeId as TLShapeId);
           } catch (err) {
-            console.warn("[useShapes] Could not delete shape:", err);
+            if (process.env.NODE_ENV === "development") {
+              console.warn("[useShapes] Could not delete shape:", err);
+            }
           }
         });
       });
 
       isSyncingRef.current = false;
+      setIsSyncing(false);
     });
 
     return (): void => {
       isMounted = false;
-      if (unsubscribeRef.current !== null) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
     };
   }, [editor, userId, roomId, enabled]);
 
   return {
-    isSyncing: isSyncingRef.current,
+    isSyncing,
     error,
   };
 }
-

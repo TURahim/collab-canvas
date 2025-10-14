@@ -92,30 +92,27 @@ export function useCursors({
     try {
       // Use tldraw's pointer event listener instead of DOM events
       // This integrates properly with tldraw's event system
-      const handlePointerEvent = (info: unknown): void => {
-        const evt = info as { name?: string; point?: { x: number; y: number } };
-        if (evt.name !== "move") {
-          return;
-        }
-        if (!evt.point) {
+      const handlePointerMove = (info: PointerEventInfo): void => {
+        if (!info.point) {
           return;
         }
         
         try {
           // The point is already in page coordinates from tldraw
-          throttledUpdateCursor(userId, evt.point);
+          throttledUpdateCursor(userId, info.point);
         } catch (err) {
           console.error("[useCursors] Error updating cursor:", err);
         }
       };
 
-      // Listen to pointer events and handle moves (bypass strict event typing)
-      (editor as any).on("pointer", handlePointerEvent);
+      // Listen to pointer move events via tldraw's event system
+      // Using type assertion to bypass strict event map typing
+      (editor as any).on("pointer-move", handlePointerMove);
       setIsTracking(true);
 
       // Cleanup
       return (): void => {
-        (editor as any).off("pointer", handlePointerEvent);
+        (editor as any).off("pointer-move", handlePointerMove);
         setIsTracking(false);
       };
     } catch (err) {

@@ -4,17 +4,24 @@
 
 **Current Phase:** Planning Complete - Ready to Start Development  
 **Foundation:** MVP 100% Complete (Real-time collaboration, cursor sync, shape persistence, authentication)  
-**Goal:** Add AI Canvas Agent with 8 commands across 4 categories  
-**Timeline:** 14-19 hours across 7 PRs  
+**Goal:** Add AI Canvas Agent with 9 commands across 4 categories  
+**Timeline:** 17-22 hours across 7 PRs  
 **Target Branch:** `dev` → merge to `main` when complete
+
+**Key Requirements:**
+- ✅ 9 commands (exceeds 6+ requirement)
+- ✅ Server-side API proxy (security P0)
+- ✅ Agentic planning (plan → execute → verify)
+- ✅ Verification & remediation layer
+- ✅ AI Development Log deliverable
 
 ---
 
 ## 🎯 AI IMPLEMENTATION ROADMAP
 
-### PR #11: AI Infrastructure & OpenAI Setup
+### PR #11: AI Infrastructure & OpenAI Setup (+ Server-Side Proxy)
 **Status:** ⏳ NOT STARTED  
-**Estimated Time:** 3-4 hours  
+**Estimated Time:** 4-5 hours  
 **Branch:** `feature/ai-infrastructure`  
 **Dependencies:** None (builds on completed MVP)
 
@@ -24,15 +31,22 @@
   npm install openai nanoid
   npm install -D @types/node
   ```
-- [ ] Add OpenAI API key to `.env.local`
+- [ ] Add OpenAI API key to `.env.local` (SERVER-SIDE ONLY)
   ```
-  NEXT_PUBLIC_OPENAI_API_KEY=sk-...
+  OPENAI_API_KEY=sk-...  # NO NEXT_PUBLIC prefix!
   ```
-- [ ] Create OpenAI client configuration (`src/lib/openai.ts`)
-  - Initialize OpenAI client
-  - Configure model (gpt-4)
-  - Set up error handling
-- [ ] Define function calling schemas for all 8 commands
+- [ ] **🔒 Create server-side API proxy (P0 - REQUIRED for security)**
+  - Create `app/api/ai/execute/route.ts`
+  - Initialize OpenAI client server-side only
+  - Accept POST requests with message and canvasContext
+  - Return OpenAI completion response
+  - Error handling and logging
+- [ ] Create client-side AI service layer (`src/lib/aiService.ts`)
+  - `executeAICommand` function that calls `/api/ai/execute`
+  - Fetch API integration (POST to internal endpoint)
+  - Response parsing and error handling
+  - Retry logic with exponential backoff
+- [ ] Define function calling schemas for all 9 commands
   - `createShape` schema
   - `createTextShape` schema
   - `moveShape` schema
@@ -41,20 +55,18 @@
   - `createGrid` schema
   - `createLoginForm` schema
   - `createCard` schema
+  - `createNavigationBar` schema (NEW)
 - [ ] Create rate limiting hook (`src/hooks/useRateLimit.ts`)
   - LocalStorage-based tracking
   - 10 commands per hour per user
   - Reset timer logic
   - Remaining count calculation
-- [ ] Create AI service layer (`src/lib/aiService.ts`)
-  - `executeAICommand` function
-  - OpenAI API call with function calling
-  - Retry logic with exponential backoff
-  - Error handling and parsing
 - [ ] Create AI types (`src/types/ai.ts`)
   - Message interface
   - Tool function types
   - Rate limit state types
+  - ExecutionPlan and ExecutionStep interfaces
+  - VerificationResult interface
 
 #### Testing
 - [ ] Unit test: Rate limiting hook
@@ -62,21 +74,29 @@
   - Blocks 11th command
   - Resets after 1 hour
   - Persists to localStorage
-- [ ] Unit test: OpenAI client configuration
-  - Initializes with API key
-  - Throws error if no API key
-- [ ] Integration test: Basic OpenAI API call
-  - Successful response
-  - Error handling
-  - Retry logic
+- [ ] Unit test: Server-side API route
+  - Accepts POST with valid body
+  - Returns OpenAI completion
+  - Handles missing API key error
+  - Returns 500 on OpenAI error
+- [ ] Integration test: Client to server API call
+  - Client calls `/api/ai/execute`
+  - Server proxies to OpenAI
+  - Response parsed correctly
+  - Error handling end-to-end
+  - Retry logic works
 
 #### Acceptance Criteria
 - [ ] OpenAI SDK installed and configured
-- [ ] Function schemas defined for all 8 commands
+- [ ] **🔒 Server-side API proxy implemented (`/api/ai/execute`)**
+- [ ] **OpenAI API key stored server-side only (no NEXT_PUBLIC prefix)**
+- [ ] Client calls internal API, not OpenAI directly
+- [ ] Function schemas defined for all 9 commands (including navigationBar)
 - [ ] Rate limiting enforces 10/hour limit
 - [ ] Error handling with retries implemented
-- [ ] All tests passing (minimum 6 tests)
+- [ ] All tests passing (minimum 8 tests)
 - [ ] No API key committed to repository
+- [ ] **Security: API key never exposed to client**
 
 **Merge to:** `dev`
 
@@ -441,9 +461,9 @@
 
 ---
 
-### PR #16: Canvas Tool Functions - Complex Commands
+### PR #16: Canvas Tool Functions - Complex Commands (3 commands)
 **Status:** ⏳ NOT STARTED  
-**Estimated Time:** 2-3 hours  
+**Estimated Time:** 3-4 hours  
 **Branch:** `feature/ai-complex-commands`  
 **Dependencies:** PR #15 (Layout commands)
 
@@ -472,6 +492,17 @@
   - Default values: title="Card Title", subtitle="Card subtitle"
   - Select all created shapes
   - Return array of created shape IDs
+- [ ] **Implement `createNavigationBar` function (Command 9 - NEW)**
+  - Parameters: menuItems array, logoText, color
+  - Create 9-10 shapes:
+    1. Nav bar background (800x60, dark color)
+    2. Logo text (left side)
+    3-10. 4 menu item buttons + text labels
+  - Horizontal alignment with consistent spacing
+  - Default menu items: ['Home', 'About', 'Services', 'Contact']
+  - Position centered in viewport
+  - Select all created shapes
+  - Return array of created shape IDs
 - [ ] Add helper function: `createMultiShapeLayout`
   - Generic function for complex layouts
   - Takes array of shape definitions
@@ -482,14 +513,26 @@
   - Takes base center point and offset
   - Calculates absolute position
   - Useful for multi-shape layouts
+- [ ] **Add agentic planning for complex commands**
+  - Implement multi-step execution with plan generation
+  - Show step-by-step progress in chat
+  - Execute sequentially with visual feedback
+  - Brief pause between steps for UX
+- [ ] **Add verification and remediation**
+  - Verify shape count after execution
+  - Check shape types match expected
+  - Validate positions within viewport
+  - Implement remediation strategies (retry, cleanup, adjust)
 - [ ] Integrate with AI service
   - Connect createLoginForm to function calling
   - Connect createCard to function calling
+  - Connect createNavigationBar to function calling
   - Parse and validate arguments
-  - Execute tool functions
+  - Execute tool functions with verification
 - [ ] Add validation and error handling
   - Validate string parameters
   - Validate color parameter
+  - Validate array parameters (menu items)
   - Handle editor null/undefined
   - Throw descriptive errors
 
@@ -507,6 +550,18 @@
   - Content placeholder positioned correctly
   - All shapes selected after creation
   - Default values applied when params missing
+- [ ] **Unit test: createNavigationBar function (NEW)**
+  - Creates 9-10 shapes (bar + logo + menu items)
+  - Nav bar background has correct dimensions
+  - Logo positioned on left
+  - 4 menu items horizontally aligned
+  - Default menu items applied correctly
+  - All shapes selected after creation
+- [ ] **Unit test: Verification logic**
+  - Detects incorrect shape count
+  - Detects mismatched shape types
+  - Detects out-of-viewport shapes
+  - Returns appropriate remediation strategy
 - [ ] Unit test: Helper functions
   - createMultiShapeLayout creates all shapes
   - positionRelativeToCenter calculates correctly
@@ -514,19 +569,30 @@
   - User message: "Create a login form"
   - 5 shapes appear in login layout
   - All users see the form
+  - Verification confirms success
 - [ ] Integration test: AI command to createCard
   - User message: "Make a card with title 'Profile'"
   - Card layout appears with custom title
   - All users see the card
+- [ ] **Integration test: AI command to createNavigationBar (NEW)**
+  - User message: "Build a navigation bar with 4 menu items"
+  - Nav bar with 4 menu items appears
+  - All users see the navigation bar
+  - Progress feedback shown during creation
 
 #### Acceptance Criteria
-- [ ] createLoginForm creates full login interface
-- [ ] createCard creates card layout with parameters
+- [ ] createLoginForm creates full login interface (5 shapes)
+- [ ] createCard creates card layout with parameters (4 shapes)
+- [ ] **createNavigationBar creates nav bar with menu items (9-10 shapes)**
+- [ ] All 3 complex commands working reliably
+- [ ] Multi-step execution with visible progress
+- [ ] Verification confirms correct shape count and types
+- [ ] Remediation handles failures gracefully
 - [ ] Multi-shape layouts maintain relative positioning
 - [ ] All shapes center in viewport
 - [ ] Complex commands complete in < 5 seconds
 - [ ] All created shapes sync to other users
-- [ ] All tests passing (minimum 10 tests)
+- [ ] All tests passing (minimum 14 tests)
 - [ ] Error handling for invalid inputs
 
 **Example Commands:**
@@ -536,6 +602,9 @@
 - "Create a card layout"
 - "Make a profile card with title 'John Doe'"
 - "Build a card component"
+- **"Build a navigation bar with 4 menu items"** (NEW)
+- **"Create a nav with Home, About, Contact"** (NEW)
+- **"Make a top navigation menu"** (NEW)
 
 **Merge to:** `dev`
 
@@ -549,11 +618,13 @@
 
 #### Tasks
 - [ ] End-to-end testing
-  - Test all 8 commands from chat interface
+  - Test all 9 commands from chat interface (including navigationBar)
   - Verify each command creates correct shapes
   - Test with various natural language inputs
   - Test edge cases (no selection, invalid inputs)
   - Test error scenarios (API failure, network loss)
+  - **Test verification logic for multi-shape commands**
+  - **Test agentic planning and step-by-step execution**
 - [ ] Multi-user testing
   - Test concurrent AI usage (2+ users)
   - Verify shapes sync correctly
@@ -589,28 +660,43 @@
   - Add examples for each command
   - Clarify ambiguous instructions
   - Test with varied phrasings
+- [ ] **📝 Create AI Development Log (REQUIRED DELIVERABLE)**
+  - Document all AI tools used (GPT-4, Copilot, Cursor, etc.)
+  - Key prompts and prompt engineering techniques
+  - Percentage breakdown (AI-generated vs human-written)
+  - Challenges faced with AI assistance
+  - AI contribution to testing/debugging
+  - Overall assessment of AI-augmented development
+  - Format as 1-page document
+  - Include in final submission
 - [ ] Update README.md
   - Add "AI Canvas Agent" section
-  - Document all 8 commands with examples
-  - Add OpenAI API key setup instructions
+  - Document all 9 commands with examples (including navigationBar)
+  - Add OpenAI API key setup instructions (server-side only)
   - Update feature list
   - Add usage guide
   - Include screenshots/GIFs
+  - **Document server-side API proxy architecture**
+  - **Add verification and remediation documentation**
 - [ ] Update architecture.md
   - Add AI layer to architecture diagram
-  - Document OpenAI integration flow
+  - Document OpenAI integration flow (server-side proxy)
   - Update data flow diagrams
-  - Add AI-specific patterns
+  - Add AI-specific patterns (agentic planning, verification)
+  - Document security architecture
 - [ ] Create AI_COMMANDS.md
-  - List all 8 commands
+  - List all 9 commands (including navigationBar)
   - Example prompts for each
   - Parameters and options
   - Expected behavior
   - Troubleshooting guide
+  - Command categories and complexity
 - [ ] Update .env.local.example
-  - Add NEXT_PUBLIC_OPENAI_API_KEY placeholder
+  - Add OPENAI_API_KEY placeholder (NO NEXT_PUBLIC prefix)
+  - **Document server-side only security requirement**
   - Document where to get API key
   - Note about costs
+  - **Warning about API key exposure**
 - [ ] Final code review
   - Check for commented-out code
   - Remove console.logs
@@ -622,26 +708,35 @@
 - [ ] Run full test suite
   - All unit tests passing
   - All integration tests passing
-  - New test count: 50+ tests (added ~40 for AI)
-  - Total test count: 160+ tests (122 MVP + 40 AI)
+  - New test count: 60+ tests (added ~50 for AI)
+  - Total test count: 170+ tests (122 MVP + 50 AI)
+  - **Verification tests passing**
+  - **Agentic planning tests passing**
 - [ ] Manual testing checklist
-  - All 8 commands tested
+  - All 9 commands tested (including navigationBar)
   - Multi-user testing complete
   - Performance targets met
   - Rate limiting verified
   - Error handling validated
+  - **Verification and remediation tested**
+  - **Server-side API proxy security verified**
   - Mobile responsiveness checked
 
 #### Acceptance Criteria
-- [ ] All 8 AI commands working reliably
+- [ ] All 9 AI commands working reliably
+- [ ] **Server-side API proxy implemented and secure**
+- [ ] **Agentic planning with visible progress working**
+- [ ] **Verification and remediation logic functional**
 - [ ] Response times meet targets (<2s single, <5s complex)
 - [ ] Multi-user AI coordination working
 - [ ] Rate limiting enforced correctly
 - [ ] Error handling graceful and informative
+- [ ] **AI Development Log completed (1-page document)**
 - [ ] Documentation complete and accurate
-- [ ] All tests passing (160+ total)
+- [ ] All tests passing (170+ total)
 - [ ] Code clean and production-ready
 - [ ] Ready for deployment
+- [ ] **All required deliverables complete**
 
 **Merge to:** `dev`, then merge `dev` to `main`
 
@@ -651,10 +746,10 @@
 
 ### Test Coverage by Module
 
-**AI Infrastructure (PR #11):** 6+ tests
+**AI Infrastructure (PR #11):** 8+ tests
 - Rate limiting hook: 3 tests
-- OpenAI client: 2 tests
-- API integration: 1 test
+- Server-side API route: 3 tests
+- Client-server integration: 2 tests
 
 **Chat Widget (PR #12):** 8+ tests
 - FloatingChat component: 4 tests
@@ -673,16 +768,18 @@
 - arrangeShapes function: 5 tests
 - createGrid function: 5 tests
 
-**Complex Commands (PR #16):** 10+ tests
+**Complex Commands (PR #16):** 14+ tests
 - createLoginForm function: 5 tests
 - createCard function: 5 tests
+- **createNavigationBar function: 5 tests (NEW)**
+- **Verification logic: 4 tests (NEW)**
 
-**Total New Tests:** ~54 tests  
-**Combined with MVP:** 122 (MVP) + 54 (AI) = **176 total passing tests**
+**Total New Tests:** ~60 tests  
+**Combined with MVP:** 122 (MVP) + 60 (AI) = **182 total passing tests**
 
 ### Test Types Breakdown
-- Unit tests: ~45 tests (individual functions)
-- Integration tests: ~9 tests (AI + canvas + sync)
+- Unit tests: ~50 tests (individual functions + verification)
+- Integration tests: ~10 tests (AI + canvas + sync + verification)
 - End-to-end: Manual testing (all scenarios)
 
 ---
@@ -691,8 +788,9 @@
 
 ### Development Phases
 
-**Phase 1: Infrastructure (PR #11-12)** — 6-8 hours
+**Phase 1: Infrastructure (PR #11-12)** — 7-9 hours
 - OpenAI setup and configuration
+- **Server-side API proxy implementation (P0)**
 - Chat widget UI and state management
 - Rate limiting and error handling
 
@@ -701,40 +799,62 @@
 - Manipulation commands (move, transform)
 - Integration with tldraw editor
 
-**Phase 3: Advanced Commands (PR #15-16)** — 4-6 hours
+**Phase 3: Advanced Commands (PR #15-16)** — 5-7 hours
 - Layout commands (arrange, grid)
-- Complex commands (login form, card)
+- Complex commands (login form, card, **navigation bar**)
+- **Agentic planning implementation**
+- **Verification and remediation logic**
 - Multi-shape coordination
 
 **Phase 4: Polish & Testing (PR #17)** — 2-3 hours
-- End-to-end testing
+- End-to-end testing of all 9 commands
+- **AI Development Log creation (required)**
 - Performance optimization
 - Documentation updates
 - Final code review
 
-**Total Estimated Time:** 16-23 hours  
+**Total Estimated Time:** 18-25 hours  
 **Target Timeline:** 2-3 weeks (assuming part-time work)
 
 ### Milestones
-- [ ] Milestone 1: OpenAI integration working (PR #11)
+- [ ] Milestone 1: Server-side proxy & OpenAI integration (PR #11)
 - [ ] Milestone 2: Chat UI functional (PR #12)
 - [ ] Milestone 3: First command working end-to-end (PR #13)
-- [ ] Milestone 4: All 8 commands implemented (PR #16)
-- [ ] Milestone 5: Testing complete, ready for deployment (PR #17)
+- [ ] Milestone 4: All 9 commands implemented (PR #16)
+- [ ] Milestone 5: AI Development Log complete (PR #17)
+- [ ] Milestone 6: Testing complete, ready for deployment (PR #17)
 
 ---
 
 ## 🎯 PROJECT COMPLETION CHECKLIST
 
 ### Core Requirements
-- [ ] 8+ distinct AI commands implemented
+- [ ] **9 distinct AI commands implemented** (exceeds 6+ requirement)
+  - [ ] createShape
+  - [ ] createTextShape
+  - [ ] moveShape
+  - [ ] transformShape
+  - [ ] arrangeShapes
+  - [ ] createGrid
+  - [ ] createLoginForm
+  - [ ] createCard
+  - [ ] **createNavigationBar (NEW)**
 - [ ] 4 command categories covered (creation, manipulation, layout, complex)
 - [ ] Natural language interface working
 - [ ] < 2 second latency for single-step commands
 - [ ] < 5 second latency for multi-step commands
+- [ ] **Agentic planning (plan → execute → verify)**
+- [ ] **Verification and remediation working**
 - [ ] All users see AI-generated shapes in real-time
 - [ ] Multi-user AI coordination working
 - [ ] Rate limiting enforced (10 commands/hour/user)
+
+### Security Requirements (P0)
+- [ ] **Server-side API proxy implemented (`/api/ai/execute`)**
+- [ ] **OpenAI API key stored server-side only (no NEXT_PUBLIC prefix)**
+- [ ] **Client never has direct access to OpenAI API**
+- [ ] **API key never exposed to browser/client**
+- [ ] Environment variables properly configured
 
 ### Integration Requirements
 - [ ] AI shapes sync via existing Firestore
@@ -744,19 +864,30 @@
 - [ ] Compatible with all existing MVP features
 
 ### Quality Requirements
-- [ ] 160+ total tests passing
+- [ ] **180+ total tests passing (122 MVP + 60 AI)**
 - [ ] Test coverage > 80% for AI code
 - [ ] No TypeScript errors
 - [ ] No console warnings
 - [ ] Clean code (no commented-out code, no unused imports)
 - [ ] Comprehensive documentation
+- [ ] **UX: Progress indicators during multi-shape operations**
+- [ ] **UX: Shape count confirmation after commands**
+
+### Deliverables
+- [ ] Working application with 9 AI commands
+- [ ] README.md updated with AI features
+- [ ] AI_COMMANDS.md with all command examples
+- [ ] **AI Development Log (1-page document - REQUIRED)**
+- [ ] architecture.md updated with AI layer
+- [ ] Deployed to Vercel
 
 ### Deployment Requirements
 - [ ] Environment variables documented
-- [ ] .env.local.example updated
+- [ ] .env.local.example updated (OPENAI_API_KEY, no NEXT_PUBLIC)
 - [ ] Vercel deployment successful
-- [ ] NEXT_PUBLIC_OPENAI_API_KEY configured
+- [ ] **OPENAI_API_KEY configured in Vercel (server-side only)**
 - [ ] Multi-user testing on production URL
+- [ ] **Server-side proxy functional in production**
 
 ---
 

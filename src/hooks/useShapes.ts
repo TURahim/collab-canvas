@@ -35,10 +35,11 @@ interface UseShapesReturn {
 
 /**
  * Hook to sync tldraw shapes with Firestore
- * - Listens to local shape changes and syncs to Firestore (debounced 300ms)
+ * - Listens to local shape changes (user AND programmatic/AI) and syncs to Firestore (debounced 300ms)
  * - Listens to remote shape changes and applies to local editor
- * - Prevents sync loops with isSyncing flag
+ * - Prevents sync loops by filtering out "remote" source and using isSyncing flag
  * - Handles shape creation, updates, and deletion
+ * - AI-generated shapes are persisted since they have source !== "remote"
  * 
  * @returns Object containing isSyncing status and error state
  */
@@ -55,19 +56,31 @@ export function useShapes({
   const pendingShapesRef = useRef<Map<string, TLShape>>(new Map());
 
   /**
-   * Debounced function to write shape to Firestore
-   * 300ms delay after last change to batch rapid updates
+   * Per-shape debounced write functions
+   * Each shape has its own debounce timer to prevent cancellation
    */
-  const debouncedWriteShape = useRef(
-    debounce(async (shape: TLShape, uid: string, room: string) => {
+  const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  
+  const writeShapeDebounced = useRef((shape: TLShape, uid: string, room: string) => {
+    // Clear existing timer for THIS specific shape
+    const existingTimer = debounceTimersRef.current.get(shape.id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    
+    // Set new timer for THIS shape only
+    const timer = setTimeout(async () => {
       try {
         await writeShapeToFirestore(room, shape, uid);
+        debounceTimersRef.current.delete(shape.id);
       } catch (err) {
         console.error("[useShapes] Error writing shape:", err);
         setError(err instanceof Error ? err : new Error("Failed to write shape"));
       }
-    }, 300)
-  ).current;
+    }, 300);
+    
+    debounceTimersRef.current.set(shape.id, timer);
+  }).current;
 
   /**
    * Load initial shapes from Firestore on mount
@@ -81,9 +94,12 @@ export function useShapes({
 
     const loadInitialShapes = async (): Promise<void> => {
       try {
+        console.log('[useShapes] Loading initial shapes from Firestore...');
         isSyncingRef.current = true;
         setIsSyncing(true);
         const shapes = await getAllShapes(roomId);
+        
+        console.log(`[useShapes] Loaded ${shapes.length} shapes from Firestore`);
 
         if (!isMounted) {
           isSyncingRef.current = false;
@@ -97,6 +113,10 @@ export function useShapes({
             const tldrawShape = firestoreShapeToTldraw(firestoreShape);
             try {
               editor.createShape(tldrawShape as TLShape);
+              console.log('[useShapes] Restored shape:', {
+                id: firestoreShape.id,
+                type: firestoreShape.type,
+              });
             } catch (err) {
               // Shape might already exist or be invalid
               if (process.env.NODE_ENV === "development") {
@@ -106,6 +126,7 @@ export function useShapes({
           });
         });
 
+        console.log('[useShapes] Initial shape load complete');
         isSyncingRef.current = false;
         setIsSyncing(false);
       } catch (err) {
@@ -139,17 +160,37 @@ export function useShapes({
         return;
       }
 
-      // Only process user-initiated changes
-      if (event.source !== "user") {
+      // Process user-initiated changes and programmatic changes (AI-generated shapes)
+      // Skip only "remote" changes (from other users via Firestore sync)
+      if (event.source === "remote") {
         return;
+      }
+
+      // Log event source for debugging
+      const addedCount = Object.keys(event.changes.added).length;
+      const updatedCount = Object.keys(event.changes.updated).length;
+      const removedCount = Object.keys(event.changes.removed).length;
+      
+      if (addedCount > 0 || updatedCount > 0 || removedCount > 0) {
+        console.log('[useShapes] Store change detected:', {
+          source: event.source,
+          added: addedCount,
+          updated: updatedCount,
+          removed: removedCount,
+        });
       }
 
       // Process added shapes
       Object.values(event.changes.added).forEach((record) => {
         if (record.typeName === "shape") {
           const shape = record as TLShape;
+          console.log('[useShapes] Saving new shape to Firestore:', {
+            id: shape.id,
+            type: shape.type,
+            source: event.source,
+          });
           pendingShapesRef.current.set(shape.id, shape);
-          debouncedWriteShape(shape, userId, roomId);
+          writeShapeDebounced(shape, userId, roomId);
         }
       });
 
@@ -159,7 +200,7 @@ export function useShapes({
         if (to.typeName === "shape") {
           const shape = to as TLShape;
           pendingShapesRef.current.set(shape.id, shape);
-          debouncedWriteShape(shape, userId, roomId);
+          writeShapeDebounced(shape, userId, roomId);
         }
       });
 
@@ -178,14 +219,18 @@ export function useShapes({
     };
 
     const unsubscribe = editor.store.listen(handleStoreChange, {
-      source: "user",
       scope: "document",
+      // Note: Removed source filter to capture both "user" and programmatic (AI) changes
+      // We filter out "remote" changes in the handler instead
     });
 
     return (): void => {
       unsubscribe();
+      // Clear all pending timers on unmount
+      debounceTimersRef.current.forEach(timer => clearTimeout(timer));
+      debounceTimersRef.current.clear();
     };
-  }, [editor, userId, roomId, enabled, debouncedWriteShape]);
+  }, [editor, userId, roomId, enabled, writeShapeDebounced]);
 
   /**
    * Listen to Firestore shape changes and apply to editor

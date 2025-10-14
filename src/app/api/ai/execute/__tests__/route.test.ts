@@ -173,7 +173,7 @@ describe('/api/ai/execute', () => {
             expect.objectContaining({ role: 'user', content: 'Create a red rectangle' }),
           ]),
           tools: expect.any(Array),
-          tool_choice: 'auto',
+          tool_choice: 'required', // Force function calling
         })
       );
     });
@@ -182,7 +182,7 @@ describe('/api/ai/execute', () => {
       process.env.OPENAI_API_KEY = 'test-key';
 
       const apiError = new OpenAI.APIError(
-        500,
+        503,
         {
           error: {
             message: 'Service unavailable',
@@ -191,9 +191,8 @@ describe('/api/ai/execute', () => {
           },
         },
         'Service unavailable',
-        {}
+        undefined
       );
-      apiError.status = 503;
 
       mockCreate.mockRejectedValueOnce(apiError);
 

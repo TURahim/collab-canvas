@@ -30,6 +30,7 @@ describe('canvasTools', () => {
   beforeEach(() => {
     mockEditor = {
       createShape: jest.fn(),
+      createShapes: jest.fn(), // For text shapes (plural API)
       select: jest.fn(),
       getViewportPageBounds: jest.fn().mockReturnValue({
         x: 0,
@@ -91,9 +92,9 @@ describe('canvasTools', () => {
       mockEditor.getViewportPageBounds.mockReturnValue({
         x: 100,
         y: 50,
-        width: 800,
-        height: 600,
-      });
+        w: 800,
+        h: 600,
+      } as any);
 
       const center = getViewportCenter(mockEditor);
       expect(center).toEqual({ x: 500, y: 350 });
@@ -234,16 +235,19 @@ describe('canvasTools', () => {
       });
 
       expect(shapeId).toBe('shape:test-id-123');
-      expect(mockEditor.createShape).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'shape:test-id-123',
-          type: 'text',
-          props: expect.objectContaining({
-            text: 'Hello World',
-            size: 'l', // 32px maps to 'l' (24-32 range)
-            color: 'red',
-          }),
-        })
+      expect(mockEditor.createShapes).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'shape:test-id-123',
+            type: 'text',
+            props: expect.objectContaining({
+              text: 'Hello World',
+              align: 'start',
+              size: 'l', // 32px maps to 'l' (24-32 range)
+              color: 'red',
+            }),
+          })
+        ])
       );
       expect(mockEditor.select).toHaveBeenCalledWith('shape:test-id-123');
     });
@@ -253,7 +257,7 @@ describe('canvasTools', () => {
         text: 'Test',
       });
 
-      const createCall = (mockEditor.createShape as jest.Mock).mock.calls[0][0];
+      const createCall = (mockEditor.createShapes as jest.Mock).mock.calls[0][0][0];
       // Should be centered around viewport center
       expect(createCall.x).toBeLessThan(500);
       expect(createCall.y).toBeLessThan(400);
@@ -264,12 +268,14 @@ describe('canvasTools', () => {
         text: 'Test',
       });
 
-      expect(mockEditor.createShape).toHaveBeenCalledWith(
-        expect.objectContaining({
-          props: expect.objectContaining({
-            size: 'm', // 24px default maps to 'm' (16-24 range)
-          }),
-        })
+      expect(mockEditor.createShapes).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            props: expect.objectContaining({
+              size: 'm', // 24px default maps to 'm' (16-24 range)
+            }),
+          })
+        ])
       );
     });
 
@@ -278,12 +284,14 @@ describe('canvasTools', () => {
         text: '  Hello World  ',
       });
 
-      expect(mockEditor.createShape).toHaveBeenCalledWith(
-        expect.objectContaining({
-          props: expect.objectContaining({
-            text: 'Hello World',
-          }),
-        })
+      expect(mockEditor.createShapes).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            props: expect.objectContaining({
+              text: 'Hello World',
+            }),
+          })
+        ])
       );
     });
 
@@ -779,10 +787,11 @@ describe('canvasTools', () => {
 
       createMultiShapeLayout(mockEditor, shapeDefinitions);
 
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(1);
-      const call = (mockEditor.createShape as jest.Mock).mock.calls[0][0];
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(1);
+      const call = (mockEditor.createShapes as jest.Mock).mock.calls[0][0][0];
       expect(call.type).toBe('text');
-      expect(call.props.text).toBe('Hello');
+      expect(call.props.richText).toBeDefined();
+      expect(call.props.richText.text).toBe('Hello');
     });
 
     it('should throw error when editor is null', () => {
@@ -794,11 +803,13 @@ describe('canvasTools', () => {
 
   // Complex Commands Tests
   describe('createLoginForm', () => {
-    it('should create exactly 5 shapes for login form', () => {
+    it('should create exactly 8 shapes for login form', () => {
       const result = createLoginForm(mockEditor);
 
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(5);
-      expect(result).toHaveLength(5);
+      // 4 geo shapes (background + 2 inputs + button) + 4 text shapes (title + 2 labels + button text) = 8 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(4);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(4);
+      expect(result).toHaveLength(8);
     });
 
     it('should create background rectangle', () => {
@@ -808,48 +819,65 @@ describe('canvasTools', () => {
       const backgroundCall = calls[0][0];
       
       expect(backgroundCall.type).toBe('geo');
-      expect(backgroundCall.props.w).toBe(300);
-      expect(backgroundCall.props.h).toBe(300);
+      expect(backgroundCall.props.w).toBe(320);
+      expect(backgroundCall.props.h).toBe(380);
       expect(backgroundCall.props.color).toBe('light-blue');
     });
 
     it('should create title text with correct properties', () => {
       createLoginForm(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const titleCall = calls[1][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const titleCall = textCalls[0][0][0]; // First text shape created
       
       expect(titleCall.type).toBe('text');
-      expect(titleCall.props.text).toBe('Login');
+      expect(titleCall.props.richText.text).toBe('Login');
       expect(titleCall.props.size).toBe('l'); // 32px maps to l (≤32)
     });
 
-    it('should create two input fields', () => {
+    it('should create two input fields with labels', () => {
       createLoginForm(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const usernameCall = calls[2][0];
-      const passwordCall = calls[3][0];
+      const geoCalls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const usernameField = geoCalls[1][0]; // Second geo shape
+      const passwordField = geoCalls[2][0]; // Third geo shape
       
-      expect(usernameCall.type).toBe('geo');
-      expect(usernameCall.props.w).toBe(250);
-      expect(usernameCall.props.h).toBe(40);
+      expect(usernameField.type).toBe('geo');
+      expect(usernameField.props.w).toBe(260);
+      expect(usernameField.props.h).toBe(40);
+      expect(usernameField.props.color).toBe('grey');
       
-      expect(passwordCall.type).toBe('geo');
-      expect(passwordCall.props.w).toBe(250);
-      expect(passwordCall.props.h).toBe(40);
+      expect(passwordField.type).toBe('geo');
+      expect(passwordField.props.w).toBe(260);
+      expect(passwordField.props.h).toBe(40);
+      expect(passwordField.props.color).toBe('grey');
+
+      // Check labels
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const usernameLabel = textCalls[1][0][0]; // Second text shape
+      const passwordLabel = textCalls[2][0][0]; // Third text shape
+      
+      expect(usernameLabel.props.richText.text).toBe('Username:');
+      expect(passwordLabel.props.richText.text).toBe('Password:');
     });
 
-    it('should create submit button', () => {
+    it('should create submit button with text', () => {
       createLoginForm(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const buttonCall = calls[4][0];
+      const geoCalls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const buttonCall = geoCalls[3][0]; // Fourth geo shape
       
       expect(buttonCall.type).toBe('geo');
-      expect(buttonCall.props.w).toBe(150);
-      expect(buttonCall.props.h).toBe(40);
+      expect(buttonCall.props.w).toBe(180);
+      expect(buttonCall.props.h).toBe(45);
       expect(buttonCall.props.color).toBe('blue');
+
+      // Check button text
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const buttonText = textCalls[3][0][0]; // Fourth text shape
+      
+      expect(buttonText.props.richText.text).toBe('Submit');
+      expect(buttonText.props.color).toBe('black');
     });
 
     it('should position all shapes centered in viewport', () => {
@@ -880,7 +908,9 @@ describe('canvasTools', () => {
     it('should create exactly 4 shapes for card layout', () => {
       const result = createCard(mockEditor);
 
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(4);
+      // 2 geo shapes (background + content) + 2 text shapes (title + subtitle) = 4 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(2);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(2);
       expect(result).toHaveLength(4);
     });
 
@@ -891,8 +921,8 @@ describe('canvasTools', () => {
       const titleCall = calls[1][0];
       const subtitleCall = calls[2][0];
       
-      expect(titleCall.props.text).toBe('Card Title');
-      expect(subtitleCall.props.text).toBe('Card subtitle');
+      expect(titleCall.props.richText.text).toBe('Card Title');
+      expect(subtitleCall.props.richText.text).toBe('Card subtitle');
     });
 
     it('should use custom title when provided', () => {
@@ -901,7 +931,7 @@ describe('canvasTools', () => {
       const calls = (mockEditor.createShape as jest.Mock).mock.calls;
       const titleCall = calls[1][0];
       
-      expect(titleCall.props.text).toBe('Custom Title');
+      expect(titleCall.props.richText.text).toBe('Custom Title');
     });
 
     it('should use custom subtitle when provided', () => {
@@ -910,7 +940,7 @@ describe('canvasTools', () => {
       const calls = (mockEditor.createShape as jest.Mock).mock.calls;
       const subtitleCall = calls[2][0];
       
-      expect(subtitleCall.props.text).toBe('Custom Subtitle');
+      expect(subtitleCall.props.richText.text).toBe('Custom Subtitle');
     });
 
     it('should use custom color when provided', () => {
@@ -936,8 +966,8 @@ describe('canvasTools', () => {
     it('should create title with correct font size', () => {
       createCard(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const titleCall = calls[1][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const titleCall = textCalls[0][0][0]; // First text shape (title)
       
       expect(titleCall.type).toBe('text');
       expect(titleCall.props.size).toBe('m'); // 24px maps to m (≤24)
@@ -946,8 +976,8 @@ describe('canvasTools', () => {
     it('should create subtitle with correct font size and color', () => {
       createCard(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const subtitleCall = calls[2][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const subtitleCall = textCalls[1][0][0]; // Second text shape (subtitle)
       
       expect(subtitleCall.type).toBe('text');
       expect(subtitleCall.props.size).toBe('s'); // 16px maps to s (≤16)
@@ -983,8 +1013,9 @@ describe('canvasTools', () => {
     it('should create correct number of shapes for navigation bar with default menu items', () => {
       const result = createNavigationBar(mockEditor);
 
-      // 1 nav bar + 1 logo + 4 menu items * 2 (button + text) = 10 shapes
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(10);
+      // 5 geo shapes (nav + 4 buttons) + 5 text shapes (logo + 4 menu texts) = 10 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(5);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(5);
       expect(result).toHaveLength(10);
     });
 
@@ -1002,19 +1033,20 @@ describe('canvasTools', () => {
       const customMenuItems = ['Dashboard', 'Profile', 'Settings'];
       const result = createNavigationBar(mockEditor, { menuItems: customMenuItems });
 
-      // 1 nav bar + 1 logo + 3 menu items * 2 = 8 shapes
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(8);
+      // 4 geo shapes (nav + 3 buttons) + 4 text shapes (logo + 3 menu texts) = 8 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(4);
       expect(result).toHaveLength(8);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(4);
     });
 
     it('should use custom logo text when provided', () => {
       createNavigationBar(mockEditor, { logoText: 'MyApp' });
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const logoCall = calls[1][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const logoCall = textCalls[0][0][0]; // First text shape (logo)
       
       expect(logoCall.type).toBe('text');
-      expect(logoCall.props.text).toBe('MyApp');
+      expect(logoCall.props.richText.text).toBe('MyApp');
     });
 
     it('should use custom color when provided', () => {
@@ -1040,11 +1072,11 @@ describe('canvasTools', () => {
     it('should create logo on the left side', () => {
       createNavigationBar(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const logoCall = calls[1][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const logoCall = textCalls[0][0][0]; // First text shape (logo)
       
       expect(logoCall.type).toBe('text');
-      expect(logoCall.props.text).toBe('Logo');
+      expect(logoCall.props.richText.text).toBe('Logo');
       expect(logoCall.props.size).toBe('m'); // 24px maps to m (≤24)
       expect(logoCall.props.color).toBe('white');
     });
@@ -1052,9 +1084,9 @@ describe('canvasTools', () => {
     it('should create menu buttons with correct dimensions', () => {
       createNavigationBar(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      // Menu buttons start at index 2, alternating (button at even indices, text at odd)
-      const firstButton = calls[2][0];
+      const geoCalls = (mockEditor.createShape as jest.Mock).mock.calls;
+      // First geo shape is nav background, then menu buttons
+      const firstButton = geoCalls[1][0];
       
       expect(firstButton.type).toBe('geo');
       expect(firstButton.props.w).toBe(100);
@@ -1065,8 +1097,9 @@ describe('canvasTools', () => {
     it('should create menu item text with white color', () => {
       createNavigationBar(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const firstMenuText = calls[3][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      // Logo is first, then menu item texts
+      const firstMenuText = textCalls[1][0][0]; // Second text shape (first menu item)
       
       expect(firstMenuText.type).toBe('text');
       expect(firstMenuText.props.color).toBe('white');
@@ -1082,9 +1115,10 @@ describe('canvasTools', () => {
     it('should handle single menu item', () => {
       const result = createNavigationBar(mockEditor, { menuItems: ['Home'] });
 
-      // 1 nav bar + 1 logo + 1 menu item * 2 = 4 shapes
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(4);
+      // 2 geo shapes (nav + 1 button) + 2 text shapes (logo + 1 menu text) = 4 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(2);
       expect(result).toHaveLength(4);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(2);
     });
 
     it('should handle many menu items', () => {
@@ -1093,9 +1127,11 @@ describe('canvasTools', () => {
 
       // 1 nav bar + 1 logo + 6 menu items * 2 = 14 shapes
       expect(mockEditor.createShape).toHaveBeenCalledTimes(14);
-      expect(result).toHaveLength(14);
-    });
+      // 7 geo shapes (nav + 6 buttons) + 7 text shapes (logo + 6 menu texts) = 14 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(7);
 
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(7);
+    });
     it('should throw error when editor is null', () => {
       expect(() => {
         createNavigationBar(null as any);

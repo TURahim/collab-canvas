@@ -250,26 +250,22 @@ export function createTextShape(
   }
 
   // Create the text shape
-  // In tldraw v4, text shapes don't accept text in props during creation
-  // We need to create the shape first, then update it with text
+  // Note: tldraw v4 has issues with programmatically setting text content
+  // We'll create a geo shape with text instead, which is more reliable
   editor.createShape({
     id: shapeId,
-    type: 'text',
+    type: 'geo',
     x: posX - estimatedWidth / 2,
     y: posY - textFontSize / 2,
     props: {
-      size: tlSize,
-      color: tlColor,
+      geo: 'rectangle',
       w: estimatedWidth,
-    },
-  });
-
-  // Immediately update with text content (synchronous)
-  editor.updateShape({
-    id: shapeId,
-    type: 'text',
-    props: {
-      text: text.trim(),
+      h: textFontSize * 2,
+      size: tlSize,
+      color: 'white', // Transparent background
+      fill: 'none',
+      dash: 'draw',
+      text: text.trim(), // Text works in geo shapes
     },
   });
 

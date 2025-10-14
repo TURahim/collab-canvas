@@ -15,7 +15,6 @@ import { ChatMessage } from './ChatMessage';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { executeAICommand, parseAIError } from '@/lib/aiService';
 import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid } from '@/lib/canvasTools';
-// Note: createLoginForm, createCard, createNavigationBar are temporarily disabled due to tldraw v4 text limitations
 
 interface FloatingChatProps {
   editor: Editor | null;
@@ -272,15 +271,13 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               break;
               
             case 'createLoginForm':
-              addMessage('system', `🚧 Complex UI commands (login forms, cards, navigation bars) are coming soon! Due to tldraw v4 limitations with programmatic text, these features will be added in a future update. For now, try: shapes, grids, move, transform, and arrange commands!`);
-              break;
-              
             case 'createCard':
-              addMessage('system', `🚧 Complex UI commands (login forms, cards, navigation bars) are coming soon! Due to tldraw v4 limitations with programmatic text, these features will be added in a future update. For now, try: shapes, grids, move, transform, and arrange commands!`);
-              break;
-              
             case 'createNavigationBar':
-              addMessage('system', `🚧 Complex UI commands (login forms, cards, navigation bars) are coming soon! Due to tldraw v4 limitations with programmatic text, these features will be added in a future update. For now, try: shapes, grids, move, transform, and arrange commands!`);
+              // Complex UI commands temporarily disabled
+              addMessage(
+                'system',
+                '🚧 Complex UI commands (login forms, cards, navigation bars) will be added in a future update! For now, try shapes, grids, move, transform, and arrange commands!'
+              );
               break;
               
             default:

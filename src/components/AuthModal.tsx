@@ -86,10 +86,16 @@ export default function AuthModal({ onSubmit, loading = false, error }: AuthModa
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
-        {/* Header */}
+        {/* Logo and Subtitle */}
         <div className="mb-6 text-center">
-          <h1 className="mb-2 text-3xl font-bold text-gray-900">Welcome to CollabCanvas</h1>
-          <p className="text-gray-600">Sign in to start collaborating</p>
+          <div className="mb-2 flex justify-center">
+            <img 
+              src="/JellyBoardBanner.png" 
+              alt="JellyBoard Logo" 
+              className="h-16 w-auto"
+            />
+          </div>
+          <p className="text-gray-600">Meet the new way to collaborate.</p>
         </div>
 
         {/* Google Sign-In Button */}

@@ -161,6 +161,15 @@ export default function CollabCanvas(): React.JSX.Element {
   // User is authenticated and has a display name - show canvas
   return (
     <div className="fixed inset-0">
+      {/* Logo at center top */}
+      <div className="fixed left-1/2 top-4 z-20 -translate-x-1/2 transform">
+        <img 
+          src="/JellyBoardBanner.png" 
+          alt="JellyBoard Logo" 
+          className="h-12 w-auto drop-shadow-md"
+        />
+      </div>
+
       {/* Top-right user menu */}
       {user && (
         <div className="fixed right-4 top-4 z-20 flex items-center gap-3 rounded-lg bg-white/90 px-3 py-2 shadow-md backdrop-blur">

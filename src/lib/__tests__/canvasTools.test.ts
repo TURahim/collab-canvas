@@ -905,21 +905,21 @@ describe('canvasTools', () => {
   });
 
   describe('createCard', () => {
-    it('should create exactly 4 shapes for card layout', () => {
+    it('should create exactly 7 shapes for card layout', () => {
       const result = createCard(mockEditor);
 
-      // 2 geo shapes (background + content) + 2 text shapes (title + subtitle) = 4 total
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(2);
-      expect(mockEditor.createShapes).toHaveBeenCalledTimes(2);
-      expect(result).toHaveLength(4);
+      // 3 geo shapes (background + image placeholder + button) + 4 text shapes (title + subtitle + body + button text) = 7 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(3);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(4);
+      expect(result).toHaveLength(7);
     });
 
     it('should use default values when no parameters provided', () => {
       createCard(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const titleCall = calls[1][0];
-      const subtitleCall = calls[2][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const titleCall = textCalls[0][0][0]; // First text shape
+      const subtitleCall = textCalls[1][0][0]; // Second text shape
       
       expect(titleCall.props.richText.text).toBe('Card Title');
       expect(subtitleCall.props.richText.text).toBe('Card subtitle');
@@ -928,8 +928,8 @@ describe('canvasTools', () => {
     it('should use custom title when provided', () => {
       createCard(mockEditor, { title: 'Custom Title' });
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const titleCall = calls[1][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const titleCall = textCalls[0][0][0]; // First text shape
       
       expect(titleCall.props.richText.text).toBe('Custom Title');
     });
@@ -937,8 +937,8 @@ describe('canvasTools', () => {
     it('should use custom subtitle when provided', () => {
       createCard(mockEditor, { subtitle: 'Custom Subtitle' });
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const subtitleCall = calls[2][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const subtitleCall = textCalls[1][0][0]; // Second text shape
       
       expect(subtitleCall.props.richText.text).toBe('Custom Subtitle');
     });
@@ -960,7 +960,7 @@ describe('canvasTools', () => {
       
       expect(backgroundCall.type).toBe('geo');
       expect(backgroundCall.props.w).toBe(300);
-      expect(backgroundCall.props.h).toBe(200);
+      expect(backgroundCall.props.h).toBe(280);
     });
 
     it('should create title with correct font size', () => {
@@ -984,16 +984,47 @@ describe('canvasTools', () => {
       expect(subtitleCall.props.color).toBe('grey');
     });
 
-    it('should create content placeholder', () => {
+    it('should create image placeholder area', () => {
       createCard(mockEditor);
 
-      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
-      const contentCall = calls[3][0];
+      const geoCalls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const imagePlaceholder = geoCalls[1][0]; // Second geo shape (after background)
       
-      expect(contentCall.type).toBe('geo');
-      expect(contentCall.props.w).toBe(280);
-      expect(contentCall.props.h).toBe(80);
-      expect(contentCall.props.color).toBe('white');
+      expect(imagePlaceholder.type).toBe('geo');
+      expect(imagePlaceholder.props.w).toBe(280);
+      expect(imagePlaceholder.props.h).toBe(100);
+      expect(imagePlaceholder.props.color).toBe('grey');
+    });
+
+    it('should create body content text', () => {
+      createCard(mockEditor);
+
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const bodyTextCall = textCalls[2][0][0]; // Third text shape
+      
+      expect(bodyTextCall.type).toBe('text');
+      expect(bodyTextCall.props.richText.text).toBe('Card body content goes here...');
+      expect(bodyTextCall.props.size).toBe('s'); // 14px maps to s (≤16)
+      expect(bodyTextCall.props.color).toBe('black');
+    });
+
+    it('should create action button with text overlay', () => {
+      createCard(mockEditor);
+
+      const geoCalls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const buttonCall = geoCalls[2][0]; // Third geo shape (button)
+      
+      expect(buttonCall.type).toBe('geo');
+      expect(buttonCall.props.w).toBe(160);
+      expect(buttonCall.props.h).toBe(40);
+      expect(buttonCall.props.color).toBe('blue');
+
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      const buttonTextCall = textCalls[3][0][0]; // Fourth text shape
+      
+      expect(buttonTextCall.type).toBe('text');
+      expect(buttonTextCall.props.richText.text).toBe('View More');
+      expect(buttonTextCall.props.color).toBe('white');
     });
 
     it('should select all created shapes', () => {

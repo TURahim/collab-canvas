@@ -24,9 +24,9 @@ const config = {
     '!src/**/*.stories.{js,jsx,ts,tsx}',
     '!src/**/__tests__/**',
   ],
-  // Transform ES modules like nanoid
+  // Transform ES modules like nanoid, tldraw dependencies
   transformIgnorePatterns: [
-    'node_modules/(?!(nanoid)/)',
+    'node_modules/(?!(nanoid|jittered-fractional-indexing|fractional-indexing|@tldraw|signia|@tldraw/utils|@tldraw/editor)/)',
   ],
 }
 

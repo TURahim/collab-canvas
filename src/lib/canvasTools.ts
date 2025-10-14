@@ -1004,11 +1004,14 @@ export function createLoginForm(editor: Editor): TLShapeId[] {
 /**
  * Create a card layout
  * 
- * Creates 4 shapes:
- * 1. Card background (300x200, customizable color)
- * 2. Title text (size: 24)
- * 3. Subtitle text (size: 16, grey)
- * 4. Content placeholder (280x80, white)
+ * Creates 7 shapes:
+ * 1. Card background (300x280, customizable color)
+ * 2. Image/icon placeholder area (280x100, grey)
+ * 3. Title text (size: 24, black)
+ * 4. Subtitle/description text (size: 16, grey)
+ * 5. Body content text area (size: 14, black)
+ * 6. Action button (160x40, blue)
+ * 7. Action button text (size: 16, white)
  * 
  * @param editor - tldraw editor instance
  * @param params - Card parameters
@@ -1034,50 +1037,81 @@ export function createCard(
     color = 'light-blue',
   } = params;
 
-  console.log('[createCard] Creating card with 4 shapes');
+  console.log('[createCard] Creating card with 7 shapes');
 
   const center = getViewportCenter(editor);
   
-  // Define the 4 shapes for the card
+  // Define the 7 shapes for the card (matching createLoginForm's depth)
   const shapes: ShapeDefinition[] = [
-    // 1. Card background (300x200, customizable color)
+    // 1. Card background (300x280, customizable color)
     {
       shapeType: 'rectangle',
       x: center.x,
       y: center.y,
       width: 300,
-      height: 200,
+      height: 280,
       color: mapToTldrawColor(color),
     },
-    // 2. Title text (size: 24)
+    // 2. Image/icon placeholder area (280x100, grey)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y - 90,
+      width: 280,
+      height: 100,
+      color: 'grey',
+    },
+    // 3. Title text (size: 24, black, bold)
     {
       shapeType: 'text',
       x: center.x,
-      y: center.y - 60,
+      y: center.y + 5,
       width: 280,
-      height: 40,
+      height: 35,
       text: title,
       fontSize: 24,
       color: 'black',
     },
-    // 3. Subtitle text (size: 16, grey)
+    // 4. Subtitle/description text (size: 16, grey)
     {
       shapeType: 'text',
       x: center.x,
-      y: center.y - 20,
+      y: center.y + 40,
       width: 280,
-      height: 30,
+      height: 28,
       text: subtitle,
       fontSize: 16,
       color: 'grey',
     },
-    // 4. Content placeholder (280x80, white)
+    // 5. Body content text (size: 14, black) 
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y + 70,
+      width: 280,
+      height: 25,
+      text: 'Card body content goes here...',
+      fontSize: 14,
+      color: 'black',
+    },
+    // 6. Action button (160x40, blue)
     {
       shapeType: 'rectangle',
       x: center.x,
-      y: center.y + 40,
-      width: 280,
-      height: 80,
+      y: center.y + 110,
+      width: 160,
+      height: 40,
+      color: 'blue',
+    },
+    // 7. Action button text ("View More", size: 16, white)
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y + 110,
+      width: 140,
+      height: 28,
+      text: 'View More',
+      fontSize: 16,
       color: 'white',
     },
   ];

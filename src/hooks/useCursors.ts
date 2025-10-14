@@ -103,13 +103,13 @@ export function useCursors({
       };
 
       // Listen to pointer move via tldraw's event system
-      // Note: tldraw's event system types are complex, so we use type assertion
-      editor.on("pointer-move" as "pointer-move", handlePointerMove);
+      // Note: tldraw's event system types are complex, so we use const assertion
+      editor.on("pointer-move" as const, handlePointerMove);
       setIsTracking(true);
 
       // Cleanup
       return (): void => {
-        editor.off("pointer-move" as "pointer-move", handlePointerMove);
+        editor.off("pointer-move" as const, handlePointerMove);
         setIsTracking(false);
       };
     } catch (err) {

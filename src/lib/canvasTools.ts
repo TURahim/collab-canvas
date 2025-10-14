@@ -706,11 +706,36 @@ export function calculateGridLayout(
  * @returns Array of created shape IDs
  */
 export interface CreateGridParams {
-  shapeType?: 'rectangle' | 'ellipse'; // Type of shape to create (default: rectangle)
+  shapeType?: string; // Type of shape to create (default: rectangle) - accepts: rectangle, ellipse, circle, square
   rows?: number; // Number of rows (default: 3)
   columns?: number; // Number of columns (default: 3)
   spacing?: number; // Gap between shapes (default: 20px)
   color?: string; // Color of shapes (default: blue)
+}
+
+/**
+ * Normalize shape type for grid creation
+ * Maps common variations to valid shape types
+ */
+function normalizeGridShapeType(shapeType: string): 'rectangle' | 'ellipse' {
+  const normalized = shapeType.toLowerCase().trim();
+  
+  // Map common variations
+  if (normalized === 'circle' || normalized === 'circles') {
+    return 'ellipse'; // Circles are ellipses with equal dimensions
+  }
+  if (normalized === 'square' || normalized === 'squares') {
+    return 'rectangle'; // Squares are rectangles with equal dimensions
+  }
+  if (normalized === 'ellipse' || normalized === 'ellipses' || normalized === 'oval' || normalized === 'ovals') {
+    return 'ellipse';
+  }
+  if (normalized === 'rectangle' || normalized === 'rectangles' || normalized === 'box' || normalized === 'boxes') {
+    return 'rectangle';
+  }
+  
+  // Default to rectangle for unknown types
+  return 'rectangle';
 }
 
 export function createGrid(
@@ -736,12 +761,12 @@ export function createGrid(
   if (columns < 1 || columns > 20) {
     throw new Error('Columns must be between 1 and 20');
   }
-  if (shapeType !== 'rectangle' && shapeType !== 'ellipse') {
-    throw new Error('Shape type must be rectangle or ellipse');
-  }
+
+  // Normalize shape type (handles circle, square, etc.)
+  const normalizedShapeType = normalizeGridShapeType(shapeType);
 
   // Get default size for shape type
-  const shapeSize = DEFAULT_SIZES[shapeType];
+  const shapeSize = DEFAULT_SIZES[normalizedShapeType];
 
   // Calculate grid positions
   const positions = calculateGridLayout(editor, rows, columns, shapeSize, spacing);
@@ -754,7 +779,7 @@ export function createGrid(
   positions.forEach((position, index) => {
     console.log(`[createGrid] Creating shape ${index + 1}/${positions.length} at`, position);
     const shapeId = createShape(editor, {
-      shapeType,
+      shapeType: normalizedShapeType,
       x: position.x,
       y: position.y,
       width: shapeSize.width,

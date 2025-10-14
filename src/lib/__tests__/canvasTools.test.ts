@@ -701,10 +701,34 @@ describe('canvasTools', () => {
       }).toThrow('Columns must be between 1 and 20');
     });
 
-    it('should throw error for invalid shape type', () => {
-      expect(() => {
-        createGrid(mockEditor, { shapeType: 'triangle' as any });
-      }).toThrow('Shape type must be rectangle or ellipse');
+    it('should accept any shape type and normalize it', () => {
+      // Unknown shape types should default to rectangle
+      const result = createGrid(mockEditor, { shapeType: 'triangle' as any });
+      
+      expect(mockEditor.createShape).toHaveBeenCalled();
+      expect(result.length).toBe(9); // 3x3 grid by default
+    });
+
+    it('should normalize "circle" to ellipse', () => {
+      createGrid(mockEditor, { shapeType: 'circle', rows: 2, columns: 2 });
+      
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      // Check that ellipses were created (circle normalizes to ellipse)
+      calls.forEach(call => {
+        expect(call[0].type).toBe('geo');
+        expect(call[0].props.geo).toBe('ellipse');
+      });
+    });
+
+    it('should normalize "square" to rectangle', () => {
+      createGrid(mockEditor, { shapeType: 'square', rows: 2, columns: 2 });
+      
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      // Check that rectangles were created (square normalizes to rectangle)
+      calls.forEach(call => {
+        expect(call[0].type).toBe('geo');
+        expect(call[0].props.geo).toBe('rectangle');
+      });
     });
 
     it('should throw error when editor is null', () => {

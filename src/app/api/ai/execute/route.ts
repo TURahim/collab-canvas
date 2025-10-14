@@ -190,14 +190,13 @@ const tools: Tool[] = [
     type: 'function',
     function: {
       name: 'createGrid',
-      description: 'Creates a grid of shapes with specified rows and columns. Automatically centered in viewport.',
+      description: 'Creates a grid of shapes with specified rows and columns. Automatically centered in viewport. Accepts common shape names like circle, square, oval, box.',
       parameters: {
         type: 'object',
         properties: {
           shapeType: {
             type: 'string',
-            description: 'Type of shape for grid (defaults to rectangle)',
-            enum: ['rectangle', 'ellipse'],
+            description: 'Type of shape for grid. Accepts: rectangle, ellipse, circle (becomes ellipse), square (becomes rectangle), oval, box. Defaults to rectangle.',
           },
           rows: {
             type: 'number',

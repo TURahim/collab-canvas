@@ -15,6 +15,14 @@ export default function CollabCanvas() {
   const [editor, setEditor] = useState<Editor | null>(null);
 
   /**
+   * Debug: Check if Tldraw component is remounting
+   */
+  useEffect(() => {
+    console.log('[Tldraw] Component mounted');
+    return () => console.log('[Tldraw] Component unmounted');
+  }, []);
+
+  /**
    * Editor mount handler - called when tldraw editor is initialized
    */
   const handleEditorMount = useCallback((editor: Editor) => {

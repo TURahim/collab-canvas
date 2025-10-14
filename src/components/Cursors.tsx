@@ -68,24 +68,13 @@ export default function Cursors({ editor, remoteCursors }: CursorsProps) {
     // Initial update
     updatePositions();
 
-    // Update on camera changes (pan/zoom)
-    const handleCameraChange = () => {
-      updatePositions();
-    };
-
-    // Listen to camera changes
-    const unsubscribe = editor.store.listen(() => {
-      const camera = editor.getCamera();
-      if (camera) {
-        updatePositions();
-      }
-    }, { scope: "all" });
-
+    // Update when remote cursors change (handled by dependency array)
+    // No need for continuous listeners - only update when data actually changes
+    
     // Also update on window resize
     window.addEventListener("resize", updatePositions);
 
     return () => {
-      unsubscribe();
       window.removeEventListener("resize", updatePositions);
     };
   }, [editor, remoteCursors]);

@@ -159,13 +159,55 @@ export function useShapes({
 
   /**
    * Listen to tldraw editor changes
+   * IMPORTANT: We create the handler inline to avoid dependency issues
    */
   useEffect(() => {
     if (!editor || !userId || !enabled) {
       return;
     }
 
-    const unsubscribe = editor.store.listen(handleEditorChanges, {
+    const handler = (event: TLStoreEventInfo) => {
+      if (isSyncingRef.current) {
+        return;
+      }
+
+      // Only process user-initiated changes
+      if (event.source !== "user") {
+        return;
+      }
+
+      // Process added records
+      Object.values(event.changes.added).forEach((record) => {
+        if (record.typeName === "shape") {
+          const shape = record as TLShape;
+          pendingShapesRef.current.set(shape.id, shape);
+          debouncedWriteShape(shape, userId, roomId);
+        }
+      });
+
+      // Process updated records
+      Object.values(event.changes.updated).forEach((update) => {
+        const [, to] = update;
+        if (to.typeName === "shape") {
+          const shape = to as TLShape;
+          pendingShapesRef.current.set(shape.id, shape);
+          debouncedWriteShape(shape, userId, roomId);
+        }
+      });
+
+      // Process removed records
+      Object.values(event.changes.removed).forEach((record) => {
+        if (record.typeName === "shape") {
+          pendingShapesRef.current.delete(record.id);
+          deleteShapeFromFirestore(roomId, record.id as string).catch((err) => {
+            console.error("Error deleting shape:", err);
+            setError(err as Error);
+          });
+        }
+      });
+    };
+
+    const unsubscribe = editor.store.listen(handler, {
       source: "user",
       scope: "document",
     });
@@ -173,7 +215,7 @@ export function useShapes({
     return () => {
       unsubscribe();
     };
-  }, [editor, userId, enabled, handleEditorChanges]);
+  }, [editor, userId, roomId, enabled, debouncedWriteShape]);
 
   /**
    * Listen to Firestore shape changes

@@ -1,78 +1,95 @@
 "use client";
 
-import { Tldraw, Editor } from "@tldraw/tldraw";
+import type { Editor } from "@tldraw/tldraw";
+import { Tldraw } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
+import { useCallback, useEffect, useState } from "react";
+
 import { useAuth } from "../hooks/useAuth";
 import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
 import UserList from "./UserList";
-import { useCallback, useState, useEffect } from "react";
 
-export default function CollabCanvas() {
+/**
+ * CollabCanvas - Main collaborative whiteboard component
+ * 
+ * Features:
+ * - Firebase authentication with display name collection
+ * - Real-time cursor tracking across users
+ * - Real-time shape synchronization via Firestore
+ * - Tldraw integration with license key support
+ * - Error state handling for Firebase configuration
+ * - Loading states during authentication
+ * 
+ * @returns Collaborative canvas interface
+ */
+export default function CollabCanvas(): React.JSX.Element {
   const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
 
   /**
-   * Debug: Check if Tldraw component is remounting
+   * Debug: Check if Tldraw component is remounting and verify license key
    */
   useEffect(() => {
-    console.log('[Tldraw] Component mounted');
+    console.log('[CollabCanvas] Component mounted');
     const licenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
     if (licenseKey) {
       const masked = `${licenseKey.slice(0, 2)}***${licenseKey.slice(-4)}`;
-      console.log('[Tldraw] License key detected:', {
+      console.log('[CollabCanvas] License key detected:', {
         present: true,
         length: licenseKey.length,
         masked,
       });
     } else {
-      console.warn('[Tldraw] License key missing. Set NEXT_PUBLIC_TLDRAW_LICENSE_KEY in env.');
+      console.warn('[CollabCanvas] License key missing. Set NEXT_PUBLIC_TLDRAW_LICENSE_KEY in env.');
     }
-    return () => console.log('[Tldraw] Component unmounted');
+    return (): void => {
+      console.log('[CollabCanvas] Component unmounted');
+    };
   }, []);
 
   /**
    * Editor mount handler - called when tldraw editor is initialized
    */
-  const handleEditorMount = useCallback((editor: Editor) => {
+  const handleEditorMount = useCallback((editor: Editor): void => {
     setEditor(editor);
     
     // Log editor info for debugging
-    console.log("tldraw Editor mounted:", {
+    console.log("[CollabCanvas] tldraw Editor mounted:", {
       currentPage: editor.getCurrentPage()?.id,
       shapeCount: editor.getCurrentPageShapes().length,
     });
   }, []);
 
   // Set up real-time cursor tracking
-  const { remoteCursors, isTracking, error: cursorError } = useCursors({
+  const { remoteCursors, error: cursorError } = useCursors({
     editor,
-    userId: user?.uid || null,
-    userName: user?.displayName || null,
-    userColor: user?.color || "#999999",
+    userId: user?.uid ?? null,
+    userName: user?.displayName ?? null,
+    userColor: user?.color ?? "#999999",
     enabled: !!user && !!user.displayName,
   });
 
   // Set up real-time shape synchronization
   const { isSyncing, error: shapeError } = useShapes({
     editor,
-    userId: user?.uid || null,
+    userId: user?.uid ?? null,
     roomId: "default",
     enabled: !!user && !!user.displayName,
   });
 
-  // Log errors only (moved to useEffect to prevent re-render spam)
+  // Log errors (moved to useEffect to prevent re-render spam)
   useEffect(() => {
     if (cursorError) {
-      console.error("Cursor tracking error:", cursorError);
+      console.error("[CollabCanvas] Cursor tracking error:", cursorError);
     }
   }, [cursorError]);
 
   useEffect(() => {
     if (shapeError) {
-      console.error("Shape sync error:", shapeError);
+      console.error("[CollabCanvas] Shape sync error:", shapeError);
     }
   }, [shapeError]);
 
@@ -134,24 +151,19 @@ export default function CollabCanvas() {
       <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList
-        currentUserId={user?.uid || null}
-        currentUserName={user?.displayName || null}
-        currentUserColor={user?.color || "#999999"}
+        currentUserId={user?.uid ?? null}
+        currentUserName={user?.displayName ?? null}
+        currentUserColor={user?.color ?? "#999999"}
       />
       
       {/* Status indicators */}
-      <div className="fixed bottom-4 left-4 z-10 flex flex-col gap-2 pointer-events-none">
-        {isTracking && (
-          <div className="rounded-lg bg-green-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
-            🟢 Cursor tracking active
-          </div>
-        )}
-        {isSyncing && (
+      {isSyncing && (
+        <div className="fixed bottom-4 left-4 z-10 pointer-events-none">
           <div className="rounded-lg bg-blue-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
             🔄 Syncing shapes...
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

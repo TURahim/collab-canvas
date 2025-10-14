@@ -5,16 +5,23 @@
 
 "use client";
 
+import type { Editor } from "@tldraw/tldraw";
 import { useEffect, useState } from "react";
-import { Editor } from "@tldraw/tldraw";
-import { UserPresence } from "../types";
+
+import type { UserPresence } from "../types";
 import { pageToScreen } from "../lib/tldrawHelpers";
 
+/**
+ * Props for Cursors component
+ */
 interface CursorsProps {
   editor: Editor | null;
   remoteCursors: Record<string, UserPresence>;
 }
 
+/**
+ * Screen position and metadata for a remote cursor
+ */
 interface CursorPosition {
   x: number;
   y: number;
@@ -23,14 +30,23 @@ interface CursorPosition {
 }
 
 /**
- * Renders all remote users' cursors as positioned overlays
- * Updates positions when camera moves (pan/zoom)
+ * Cursors - Renders remote users' cursors as positioned overlays
+ * 
+ * Features:
+ * - Converts page coordinates to screen coordinates
+ * - Updates positions when camera moves (pan/zoom)
+ * - Updates positions on window resize
+ * - Smooth transitions with CSS transforms
+ * 
+ * @param props - Component props
+ * @returns Overlay with remote cursors
  */
-export default function Cursors({ editor, remoteCursors }: CursorsProps) {
+export default function Cursors({ editor, remoteCursors }: CursorsProps): React.JSX.Element | null {
   const [cursorPositions, setCursorPositions] = useState<Record<string, CursorPosition>>({});
 
   /**
    * Update cursor screen positions based on page coordinates and camera
+   * Runs when editor, remoteCursors change, or window resizes
    */
   useEffect(() => {
     if (!editor) {
@@ -38,11 +54,13 @@ export default function Cursors({ editor, remoteCursors }: CursorsProps) {
       return;
     }
 
-    const updatePositions = () => {
+    const updatePositions = (): void => {
       const positions: Record<string, CursorPosition> = {};
 
       Object.entries(remoteCursors).forEach(([userId, user]) => {
-        if (!user.cursor) return;
+        if (!user.cursor) {
+          return;
+        }
 
         try {
           // Convert page coordinates to screen coordinates
@@ -58,7 +76,7 @@ export default function Cursors({ editor, remoteCursors }: CursorsProps) {
             color: user.color,
           };
         } catch (err) {
-          console.error("Error converting cursor position:", err);
+          console.error("[Cursors] Error converting cursor position:", err);
         }
       });
 
@@ -74,7 +92,7 @@ export default function Cursors({ editor, remoteCursors }: CursorsProps) {
     // Also update on window resize
     window.addEventListener("resize", updatePositions);
 
-    return () => {
+    return (): void => {
       window.removeEventListener("resize", updatePositions);
     };
   }, [editor, remoteCursors]);
@@ -84,10 +102,7 @@ export default function Cursors({ editor, remoteCursors }: CursorsProps) {
   }
 
   return (
-    <div
-      className="pointer-events-none fixed inset-0 z-[100]"
-      style={{ position: "fixed" }}
-    >
+    <div className="pointer-events-none fixed inset-0 z-[100]">
       {Object.entries(cursorPositions).map(([userId, cursor]) => (
         <div
           key={userId}

@@ -3,17 +3,21 @@
  * Manages real-time shape synchronization between tldraw and Firestore
  */
 
-import { useEffect, useRef, useCallback, useState } from "react";
-import { Editor, TLShape, TLStoreEventInfo } from "@tldraw/tldraw";
+import type { Editor, TLShape, TLStoreEventInfo } from "@tldraw/tldraw";
+import { useEffect, useRef, useState } from "react";
+
 import {
-  writeShapeToFirestore,
   deleteShapeFromFirestore,
-  listenToShapes,
   firestoreShapeToTldraw,
   getAllShapes,
+  listenToShapes,
+  writeShapeToFirestore,
 } from "../lib/firestoreSync";
-import { debounce } from "../lib/tldrawHelpers";
+import { debounce } from "../lib/utils";
 
+/**
+ * Options for useShapes hook
+ */
 interface UseShapesOptions {
   editor: Editor | null;
   userId: string | null;
@@ -21,6 +25,9 @@ interface UseShapesOptions {
   enabled?: boolean;
 }
 
+/**
+ * Return type for useShapes hook
+ */
 interface UseShapesReturn {
   isSyncing: boolean;
   error: Error | null;
@@ -32,6 +39,8 @@ interface UseShapesReturn {
  * - Listens to remote shape changes and applies to local editor
  * - Prevents sync loops with isSyncing flag
  * - Handles shape creation, updates, and deletion
+ * 
+ * @returns Object containing isSyncing status and error state
  */
 export function useShapes({
   editor,
@@ -39,7 +48,7 @@ export function useShapes({
   roomId = "default",
   enabled = true,
 }: UseShapesOptions): UseShapesReturn {
-  const isSyncingRef = useRef(false);
+  const isSyncingRef = useRef<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const pendingShapesRef = useRef<Map<string, TLShape>>(new Map());
@@ -49,66 +58,15 @@ export function useShapes({
    * 300ms delay after last change to batch rapid updates
    */
   const debouncedWriteShape = useRef(
-    debounce(async (...args: unknown[]) => {
-      const [shape, uid, room] = args as [TLShape, string, string];
+    debounce(async (shape: TLShape, uid: string, room: string) => {
       try {
         await writeShapeToFirestore(room, shape, uid);
       } catch (err) {
-        console.error("Error writing shape:", err);
-        setError(err as Error);
+        console.error("[useShapes] Error writing shape:", err);
+        setError(err instanceof Error ? err : new Error("Failed to write shape"));
       }
     }, 300)
-  ).current as (shape: TLShape, uid: string, room: string) => void;
-
-  /**
-   * Handle shape changes from tldraw editor
-   * Only syncs user-initiated changes to prevent loops
-   */
-  const handleEditorChanges = useCallback(
-    (event: TLStoreEventInfo) => {
-      if (!editor || !userId || !enabled || isSyncingRef.current) {
-        return;
-      }
-
-      // Only process user-initiated changes
-      if (event.source !== "user") {
-        return;
-      }
-
-      // Process added records
-      Object.values(event.changes.added).forEach((record) => {
-        if (record.typeName === "shape") {
-          const shape = record as TLShape;
-          pendingShapesRef.current.set(shape.id, shape);
-          debouncedWriteShape(shape, userId, roomId);
-        }
-      });
-
-      // Process updated records
-      Object.values(event.changes.updated).forEach((update) => {
-        const [from, to] = update;
-        if (to.typeName === "shape") {
-          const shape = to as TLShape;
-          pendingShapesRef.current.set(shape.id, shape);
-          debouncedWriteShape(shape, userId, roomId);
-        }
-      });
-
-      // Process removed records
-      Object.values(event.changes.removed).forEach((record) => {
-        if (record.typeName === "shape") {
-          const shapeId = record.id;
-          pendingShapesRef.current.delete(shapeId);
-          // Delete immediately (no debounce for deletions)
-          deleteShapeFromFirestore(roomId, shapeId).catch((err) => {
-            console.error("Error deleting shape:", err);
-            setError(err as Error);
-          });
-        }
-      });
-    },
-    [editor, userId, roomId, enabled, debouncedWriteShape]
-  );
+  ).current;
 
   /**
    * Load initial shapes from Firestore on mount
@@ -118,33 +76,35 @@ export function useShapes({
       return;
     }
 
-    let mounted = true;
+    let isMounted = true;
 
-    const loadInitialShapes = async () => {
+    const loadInitialShapes = async (): Promise<void> => {
       try {
         isSyncingRef.current = true;
         const shapes = await getAllShapes(roomId);
 
-        if (!mounted) return;
+        if (!isMounted) {
+          return;
+        }
 
-        // Apply shapes to editor
+        // Apply shapes to editor using mergeRemoteChanges to avoid triggering listeners
         editor.store.mergeRemoteChanges(() => {
           shapes.forEach((firestoreShape) => {
             const tldrawShape = firestoreShapeToTldraw(firestoreShape);
             try {
-              editor.createShape(tldrawShape as any);
+              editor.createShape(tldrawShape);
             } catch (err) {
               // Shape might already exist or be invalid
-              console.warn("Could not create shape:", err);
+              console.warn("[useShapes] Could not create shape:", err);
             }
           });
         });
 
         isSyncingRef.current = false;
       } catch (err) {
-        console.error("Error loading initial shapes:", err);
-        if (mounted) {
-          setError(err as Error);
+        console.error("[useShapes] Error loading initial shapes:", err);
+        if (isMounted) {
+          setError(err instanceof Error ? err : new Error("Failed to load shapes"));
         }
         isSyncingRef.current = false;
       }
@@ -152,21 +112,21 @@ export function useShapes({
 
     loadInitialShapes();
 
-    return () => {
-      mounted = false;
+    return (): void => {
+      isMounted = false;
     };
   }, [editor, userId, roomId, enabled]);
 
   /**
-   * Listen to tldraw editor changes
-   * IMPORTANT: We create the handler inline to avoid dependency issues
+   * Listen to tldraw editor changes and sync to Firestore
+   * Handler is inline to ensure fresh closure over refs and dependencies
    */
   useEffect(() => {
     if (!editor || !userId || !enabled) {
       return;
     }
 
-    const handler = (event: TLStoreEventInfo) => {
+    const handleStoreChange = (event: TLStoreEventInfo): void => {
       if (isSyncingRef.current) {
         return;
       }
@@ -176,7 +136,7 @@ export function useShapes({
         return;
       }
 
-      // Process added records
+      // Process added shapes
       Object.values(event.changes.added).forEach((record) => {
         if (record.typeName === "shape") {
           const shape = record as TLShape;
@@ -185,7 +145,7 @@ export function useShapes({
         }
       });
 
-      // Process updated records
+      // Process updated shapes
       Object.values(event.changes.updated).forEach((update) => {
         const [, to] = update;
         if (to.typeName === "shape") {
@@ -195,40 +155,45 @@ export function useShapes({
         }
       });
 
-      // Process removed records
+      // Process removed shapes
       Object.values(event.changes.removed).forEach((record) => {
         if (record.typeName === "shape") {
-          pendingShapesRef.current.delete(record.id);
-          deleteShapeFromFirestore(roomId, record.id as string).catch((err) => {
-            console.error("Error deleting shape:", err);
-            setError(err as Error);
+          const shapeId = record.id as string;
+          pendingShapesRef.current.delete(shapeId);
+          // Delete immediately (no debounce for deletions)
+          deleteShapeFromFirestore(roomId, shapeId).catch((err) => {
+            console.error("[useShapes] Error deleting shape:", err);
+            setError(err instanceof Error ? err : new Error("Failed to delete shape"));
           });
         }
       });
     };
 
-    const unsubscribe = editor.store.listen(handler, {
+    const unsubscribe = editor.store.listen(handleStoreChange, {
       source: "user",
       scope: "document",
     });
 
-    return () => {
+    return (): void => {
       unsubscribe();
     };
   }, [editor, userId, roomId, enabled, debouncedWriteShape]);
 
   /**
-   * Listen to Firestore shape changes
+   * Listen to Firestore shape changes and apply to editor
+   * Skips pending shapes to avoid overwriting local changes
    */
   useEffect(() => {
     if (!editor || !userId || !enabled) {
       return;
     }
 
-    let mounted = true;
+    let isMounted = true;
 
     unsubscribeRef.current = listenToShapes(roomId, ({ added, modified, removed }) => {
-      if (!mounted || !editor) return;
+      if (!isMounted || !editor) {
+        return;
+      }
 
       // Apply remote changes to editor
       isSyncingRef.current = true;
@@ -244,14 +209,14 @@ export function useShapes({
           const tldrawShape = firestoreShapeToTldraw(firestoreShape);
           try {
             // Check if shape already exists
-            const existing = editor.getShape(firestoreShape.id as any);
+            const existing = editor.getShape(firestoreShape.id);
             if (existing) {
-              editor.updateShape(tldrawShape as any);
+              editor.updateShape(tldrawShape);
             } else {
-              editor.createShape(tldrawShape as any);
+              editor.createShape(tldrawShape);
             }
           } catch (err) {
-            console.warn("Could not add shape:", err);
+            console.warn("[useShapes] Could not add shape:", err);
           }
         });
 
@@ -264,18 +229,18 @@ export function useShapes({
 
           const tldrawShape = firestoreShapeToTldraw(firestoreShape);
           try {
-            editor.updateShape(tldrawShape as any);
+            editor.updateShape(tldrawShape);
           } catch (err) {
-            console.warn("Could not update shape:", err);
+            console.warn("[useShapes] Could not update shape:", err);
           }
         });
 
         // Handle removed shapes
         removed.forEach((shapeId) => {
           try {
-            editor.deleteShape(shapeId as any);
+            editor.deleteShape(shapeId);
           } catch (err) {
-            console.warn("Could not delete shape:", err);
+            console.warn("[useShapes] Could not delete shape:", err);
           }
         });
       });
@@ -283,9 +248,9 @@ export function useShapes({
       isSyncingRef.current = false;
     });
 
-    return () => {
-      mounted = false;
-      if (unsubscribeRef.current) {
+    return (): void => {
+      isMounted = false;
+      if (unsubscribeRef.current !== null) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }

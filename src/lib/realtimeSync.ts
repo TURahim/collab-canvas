@@ -3,19 +3,52 @@
  * Handles real-time cursor positions and user presence
  */
 
+import type { DataSnapshot } from "firebase/database";
 import {
-  ref,
-  onValue,
-  update,
-  onDisconnect,
-  serverTimestamp,
-  DatabaseReference,
   get,
+  onDisconnect,
+  onValue,
+  ref,
   remove,
+  serverTimestamp,
+  update,
 } from "firebase/database";
+
+import type { Cursor, UserPresence } from "../types";
 import { realtimeDb } from "./firebase";
-import { UserPresence, Cursor } from "../types";
 import { withRetry } from "./utils";
+
+/**
+ * Default values for user data
+ */
+const DEFAULT_USER_NAME = "Anonymous";
+const DEFAULT_USER_COLOR = "#999999";
+const HEARTBEAT_INTERVAL_MS = 10000; // 10 seconds
+
+/**
+ * Raw user data structure from Firebase Realtime Database
+ */
+interface RawUserData {
+  name?: string;
+  color?: string;
+  cursor?: Cursor;
+  online?: boolean;
+  lastSeen?: number;
+}
+
+/**
+ * Helper function to transform raw Firebase user data to UserPresence type
+ * Applies default values for missing fields
+ */
+function transformUserData(userId: string, rawData: RawUserData): UserPresence {
+  return {
+    name: rawData.name || DEFAULT_USER_NAME,
+    color: rawData.color || DEFAULT_USER_COLOR,
+    cursor: rawData.cursor || null,
+    online: rawData.online ?? false,
+    lastSeen: rawData.lastSeen || Date.now(),
+  };
+}
 
 /**
  * Updates the current user's cursor position in Realtime Database
@@ -23,12 +56,15 @@ import { withRetry } from "./utils";
  * 
  * @param userId - Current user's UID
  * @param cursor - Cursor position in page coordinates
+ * @returns Promise that resolves when update is complete
  */
 export async function updateCursorPosition(
   userId: string,
   cursor: { x: number; y: number }
 ): Promise<void> {
-  if (!userId) return;
+  if (!userId) {
+    return;
+  }
 
   const userCursorRef = ref(realtimeDb, `users/${userId}/cursor`);
   
@@ -39,7 +75,7 @@ export async function updateCursorPosition(
       lastSeen: serverTimestamp(),
     });
   } catch (error) {
-    console.error("Error updating cursor position:", error);
+    console.error("[RealtimeSync] Error updating cursor position:", error);
   }
 }
 
@@ -49,19 +85,22 @@ export async function updateCursorPosition(
  * 
  * @param userId - Current user's UID
  * @param name - User's display name
- * @param color - User's color (hex)
+ * @param color - User's color (hex format)
+ * @returns Promise that resolves when presence is updated
  */
 export async function updateUserPresence(
   userId: string,
   name: string,
   color: string
 ): Promise<void> {
-  if (!userId) return;
+  if (!userId) {
+    return;
+  }
 
   const userRef = ref(realtimeDb, `users/${userId}`);
   
   try {
-    await withRetry(async () => {
+    await withRetry(async (): Promise<void> => {
       // Set user as online with current info
       await update(userRef, {
         name,
@@ -82,7 +121,7 @@ export async function updateUserPresence(
       await onDisconnect(cursorRef).remove();
     });
   } catch (error) {
-    console.error("Error updating user presence:", error);
+    console.error("[RealtimeSync] Error updating user presence:", error);
   }
 }
 
@@ -90,11 +129,15 @@ export async function updateUserPresence(
  * Marks user as offline (called on manual disconnect)
  * 
  * @param userId - Current user's UID
+ * @returns Promise that resolves when user is marked offline
  */
 export async function markUserOffline(userId: string): Promise<void> {
-  if (!userId) return;
+  if (!userId) {
+    return;
+  }
 
   const userRef = ref(realtimeDb, `users/${userId}`);
+  const cursorRef = ref(realtimeDb, `users/${userId}/cursor`);
   
   try {
     await update(userRef, {
@@ -102,17 +145,15 @@ export async function markUserOffline(userId: string): Promise<void> {
       lastSeen: serverTimestamp(),
     });
 
-    // Remove cursor
-    const cursorRef = ref(realtimeDb, `users/${userId}/cursor`);
     await remove(cursorRef);
   } catch (error) {
-    console.error("Error marking user offline:", error);
+    console.error("[RealtimeSync] Error marking user offline:", error);
   }
 }
 
 /**
- * Listens to all users' presence and cursor data
- * Filters out offline users and users without cursors
+ * Listens to all users' presence and cursor data in real-time
+ * Filters out offline users and transforms data to UserPresence format
  * 
  * @param callback - Called with map of userId -> UserPresence whenever data changes
  * @returns Unsubscribe function to stop listening
@@ -122,50 +163,43 @@ export function listenToUsers(
 ): () => void {
   const usersRef = ref(realtimeDb, "users");
 
-  const unsubscribe = onValue(
-    usersRef,
-    (snapshot) => {
-      const data = snapshot.val();
-      
-      if (!data) {
-        callback({});
-        return;
-      }
-
-      // Filter and transform user data
-      const users: Record<string, UserPresence> = {};
-      
-      Object.entries(data).forEach(([userId, userData]: [string, any]) => {
-        // Only include online users
-        if (userData.online) {
-          users[userId] = {
-            name: userData.name || "Anonymous",
-            color: userData.color || "#999999",
-            cursor: userData.cursor || null,
-            online: userData.online,
-            lastSeen: userData.lastSeen || Date.now(),
-          };
-        }
-      });
-
-      callback(users);
-    },
-    (error) => {
-      console.error("Error listening to users:", error);
+  const handleSnapshot = (snapshot: DataSnapshot): void => {
+    const data = snapshot.val() as Record<string, RawUserData> | null;
+    
+    if (!data) {
       callback({});
+      return;
     }
-  );
+
+    // Filter and transform user data - only include online users
+    const onlineUsers: Record<string, UserPresence> = {};
+    
+    Object.entries(data).forEach(([userId, rawUserData]) => {
+      if (rawUserData.online) {
+        onlineUsers[userId] = transformUserData(userId, rawUserData);
+      }
+    });
+
+    callback(onlineUsers);
+  };
+
+  const handleError = (error: Error): void => {
+    console.error("[RealtimeSync] Error listening to users:", error);
+    callback({});
+  };
+
+  const unsubscribe = onValue(usersRef, handleSnapshot, handleError);
 
   return unsubscribe;
 }
 
 /**
- * Listens to a specific user's cursor position
+ * Listens to a specific user's cursor position in real-time
  * Useful for testing or following a specific user
  * 
  * @param userId - User ID to listen to
  * @param callback - Called with cursor position whenever it changes
- * @returns Unsubscribe function
+ * @returns Unsubscribe function to stop listening
  */
 export function listenToUserCursor(
   userId: string,
@@ -173,69 +207,66 @@ export function listenToUserCursor(
 ): () => void {
   const cursorRef = ref(realtimeDb, `users/${userId}/cursor`);
 
-  const unsubscribe = onValue(
-    cursorRef,
-    (snapshot) => {
-      const data = snapshot.val();
-      callback(data || null);
-    },
-    (error) => {
-      console.error("Error listening to cursor:", error);
-      callback(null);
-    }
-  );
+  const handleSnapshot = (snapshot: DataSnapshot): void => {
+    const cursor = snapshot.val() as Cursor | null;
+    callback(cursor);
+  };
+
+  const handleError = (error: Error): void => {
+    console.error("[RealtimeSync] Error listening to cursor:", error);
+    callback(null);
+  };
+
+  const unsubscribe = onValue(cursorRef, handleSnapshot, handleError);
 
   return unsubscribe;
 }
 
 /**
- * Gets the current snapshot of all online users
+ * Gets the current snapshot of all online users (one-time read)
  * Useful for initial state or one-time queries
  * 
- * @returns Promise with map of userId -> UserPresence
+ * @returns Promise resolving to map of userId -> UserPresence
  */
 export async function getOnlineUsers(): Promise<Record<string, UserPresence>> {
   const usersRef = ref(realtimeDb, "users");
   
   try {
     const snapshot = await get(usersRef);
-    const data = snapshot.val();
+    const data = snapshot.val() as Record<string, RawUserData> | null;
     
     if (!data) {
       return {};
     }
 
-    const users: Record<string, UserPresence> = {};
+    // Filter and transform user data - only include online users
+    const onlineUsers: Record<string, UserPresence> = {};
     
-    Object.entries(data).forEach(([userId, userData]: [string, any]) => {
-      if (userData.online) {
-        users[userId] = {
-          name: userData.name || "Anonymous",
-          color: userData.color || "#999999",
-          cursor: userData.cursor || null,
-          online: userData.online,
-          lastSeen: userData.lastSeen || Date.now(),
-        };
+    Object.entries(data).forEach(([userId, rawUserData]) => {
+      if (rawUserData.online) {
+        onlineUsers[userId] = transformUserData(userId, rawUserData);
       }
     });
 
-    return users;
+    return onlineUsers;
   } catch (error) {
-    console.error("Error getting online users:", error);
+    console.error("[RealtimeSync] Error getting online users:", error);
     return {};
   }
 }
 
 /**
  * Sets up presence heartbeat to maintain online status
- * Should be called every 10 seconds to keep user marked as online
+ * Updates lastSeen timestamp every 10 seconds to keep user marked as online
  * 
  * @param userId - Current user's UID
- * @returns Interval ID that can be cleared
+ * @returns Interval ID that can be cleared with clearInterval()
  */
 export function setupPresenceHeartbeat(userId: string): NodeJS.Timeout {
-  const interval = setInterval(async () => {
-    if (!userId) return;
+  const heartbeatCallback = async (): Promise<void> => {
+    if (!userId) {
+      return;
+    }
     
     const userRef = ref(realtimeDb, `users/${userId}`);
     
@@ -244,10 +275,12 @@ export function setupPresenceHeartbeat(userId: string): NodeJS.Timeout {
         lastSeen: serverTimestamp(),
       });
     } catch (error) {
-      console.error("Error updating heartbeat:", error);
+      console.error("[RealtimeSync] Error updating heartbeat:", error);
     }
-  }, 10000); // 10 seconds
+  };
 
-  return interval;
+  const intervalId = setInterval(heartbeatCallback, HEARTBEAT_INTERVAL_MS);
+
+  return intervalId;
 }
 

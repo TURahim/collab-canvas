@@ -3,27 +3,31 @@
  * Manages Firebase anonymous authentication and user presence in Realtime Database
  */
 
+import type { User as FirebaseUser } from "firebase/auth";
+import { onAuthStateChanged, signInAnonymously, updateProfile } from "firebase/auth";
+import { onDisconnect, ref, serverTimestamp, set } from "firebase/database";
 import { useEffect, useState } from "react";
-import { 
-  signInAnonymously, 
-  onAuthStateChanged, 
-  updateProfile,
-  User as FirebaseUser 
-} from "firebase/auth";
-import { ref, set, onDisconnect, serverTimestamp } from "firebase/database";
+
+import type { AuthState, User } from "../types";
 import { auth, realtimeDb } from "../lib/firebase";
 import { generateColorFromString } from "../lib/utils";
-import { User, AuthState } from "../types";
+
+/**
+ * Return type for useAuth hook
+ */
+interface UseAuthReturn extends AuthState {
+  setDisplayName: (name: string) => Promise<void>;
+}
 
 /**
  * Custom hook for authentication and user management
- * @returns AuthState object with user, loading, and error states
+ * Handles anonymous Firebase authentication and syncs user presence to Realtime Database
+ * 
+ * @returns Object containing user state, loading state, error state, and setDisplayName function
  */
-export function useAuth(): AuthState & {
-  setDisplayName: (name: string) => Promise<void>;
-} {
+export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
@@ -35,7 +39,7 @@ export function useAuth(): AuthState & {
     }
 
     // Listen to auth state changes
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       try {
         if (firebaseUser) {
           // User is signed in
@@ -58,14 +62,22 @@ export function useAuth(): AuthState & {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        console.error("Auth error:", err);
+        console.error("[useAuth] Authentication error:", err);
         
-        // Provide helpful error messages
+        // Provide helpful error messages based on error type
         if (err instanceof Error) {
           if (err.message.includes("configuration-not-found")) {
-            setError(new Error("Firebase configuration not found. Please check your .env.local file has valid Firebase credentials."));
+            setError(
+              new Error(
+                "Firebase configuration not found. Please check your .env.local file has valid Firebase credentials."
+              )
+            );
           } else if (err.message.includes("auth/invalid-api-key")) {
-            setError(new Error("Invalid Firebase API key. Please check your NEXT_PUBLIC_FIREBASE_API_KEY in .env.local"));
+            setError(
+              new Error(
+                "Invalid Firebase API key. Please check your NEXT_PUBLIC_FIREBASE_API_KEY in .env.local"
+              )
+            );
           } else {
             setError(err);
           }
@@ -77,19 +89,25 @@ export function useAuth(): AuthState & {
       }
     });
 
-    return () => unsubscribe();
+    return (): void => {
+      unsubscribe();
+    };
   }, []);
 
   /**
-   * Set display name for the current user
-   * @param name - Display name to set
+   * Sets display name for the current authenticated user
+   * Updates both Firebase Auth profile and Realtime Database
+   * 
+   * @param name - Display name to set (will be trimmed)
+   * @throws Error if no authenticated user or name is empty
    */
   const setDisplayName = async (name: string): Promise<void> => {
     if (!auth.currentUser) {
       throw new Error("No authenticated user");
     }
 
-    if (!name || name.trim().length === 0) {
+    const trimmedName = name.trim();
+    if (trimmedName.length === 0) {
       throw new Error("Display name cannot be empty");
     }
 
@@ -99,13 +117,13 @@ export function useAuth(): AuthState & {
 
       // Update Firebase Auth profile
       await updateProfile(auth.currentUser, {
-        displayName: name.trim(),
+        displayName: trimmedName,
       });
 
       // Create updated user object
       const userData: User = {
         uid: auth.currentUser.uid,
-        displayName: name.trim(),
+        displayName: trimmedName,
         color: generateColorFromString(auth.currentUser.uid),
         online: true,
         lastSeen: Date.now(),
@@ -117,9 +135,10 @@ export function useAuth(): AuthState & {
       // Update local state
       setUser(userData);
     } catch (err) {
-      console.error("Error setting display name:", err);
-      setError(err instanceof Error ? err : new Error("Failed to set display name"));
-      throw err;
+      console.error("[useAuth] Error setting display name:", err);
+      const error = err instanceof Error ? err : new Error("Failed to set display name");
+      setError(error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -129,15 +148,17 @@ export function useAuth(): AuthState & {
 }
 
 /**
- * Write user data to Realtime Database and set up presence
- * @param userData - User data to write
+ * Writes user data to Realtime Database and sets up presence handlers
+ * Configures automatic offline status on disconnect
+ * 
+ * @param userData - User data to write to database
+ * @throws Error if database write fails
  */
 async function writeUserToDatabase(userData: User): Promise<void> {
   try {
-    console.log("Writing user to database:", userData.uid);
     const userRef = ref(realtimeDb, `users/${userData.uid}`);
 
-    // Write user data
+    // Write user data to database
     await set(userRef, {
       name: userData.displayName,
       color: userData.color,
@@ -146,24 +167,24 @@ async function writeUserToDatabase(userData: User): Promise<void> {
       cursor: null,
     });
 
-    console.log("User data written successfully");
-
     // Set up presence: mark user as offline when disconnected
-    const disconnectRef = ref(realtimeDb, `users/${userData.uid}/online`);
-    await onDisconnect(disconnectRef).set(false);
+    const onlineRef = ref(realtimeDb, `users/${userData.uid}/online`);
+    await onDisconnect(onlineRef).set(false);
 
-    // Also update lastSeen on disconnect
+    // Update lastSeen timestamp on disconnect
     const lastSeenRef = ref(realtimeDb, `users/${userData.uid}/lastSeen`);
     await onDisconnect(lastSeenRef).set(serverTimestamp());
-
-    console.log("Presence handlers set up successfully");
   } catch (error) {
-    console.error("Error writing to database:", error);
-    console.error("Error details:", {
-      code: (error as any)?.code,
-      message: (error as any)?.message,
-      uid: userData.uid,
-    });
+    console.error("[useAuth] Error writing user to database:", error);
+    
+    // Log additional context for debugging
+    if (error instanceof Error) {
+      console.error("[useAuth] Database write failed:", {
+        message: error.message,
+        uid: userData.uid,
+      });
+    }
+    
     throw error;
   }
 }

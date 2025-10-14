@@ -3,23 +3,26 @@
  * Handles persistent shape storage and real-time synchronization
  */
 
+import type { DocumentChange, QuerySnapshot, Timestamp } from "firebase/firestore";
+import type { TLShape } from "@tldraw/tldraw";
 import {
   collection,
-  doc,
-  setDoc,
   deleteDoc,
+  doc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
-  Timestamp,
-  QuerySnapshot,
-  DocumentChange,
+  setDoc,
 } from "firebase/firestore";
+
 import { db } from "./firebase";
-import { TLShape, TLRecord } from "@tldraw/tldraw";
 import { withRetry } from "./utils";
 
-// Shape document structure in Firestore
+/**
+ * Shape document structure in Firestore
+ * Represents a tldraw shape persisted to the database
+ */
 export interface FirestoreShape {
   id: string;
   type: string;
@@ -36,12 +39,23 @@ export interface FirestoreShape {
 }
 
 /**
- * Writes a shape to Firestore
- * Debounced to 300ms in the hook to avoid excessive writes
+ * Changes returned by the shapes listener
+ */
+export interface ShapeChanges {
+  added: FirestoreShape[];
+  modified: FirestoreShape[];
+  removed: string[];
+}
+
+/**
+ * Writes a shape to Firestore with retry logic
+ * Should be debounced to 300ms in the caller to avoid excessive writes
  * 
- * @param roomId - Room identifier (default room for MVP)
+ * @param roomId - Room identifier (e.g., "default" for MVP)
  * @param shape - tldraw shape to persist
  * @param userId - ID of user making the change
+ * @returns Promise that resolves when write is complete
+ * @throws Error if write fails after retries
  */
 export async function writeShapeToFirestore(
   roomId: string,
@@ -49,10 +63,10 @@ export async function writeShapeToFirestore(
   userId: string
 ): Promise<void> {
   try {
-    await withRetry(async () => {
+    await withRetry(async (): Promise<void> => {
       const shapeRef = doc(db, `rooms/${roomId}/shapes`, shape.id);
       
-      const firestoreShape: Omit<FirestoreShape, 'createdAt' | 'updatedAt'> = {
+      const firestoreShape: Omit<FirestoreShape, "createdAt" | "updatedAt"> = {
         id: shape.id,
         type: shape.type,
         x: shape.x,
@@ -65,103 +79,108 @@ export async function writeShapeToFirestore(
         createdBy: userId,
       };
 
-      await setDoc(shapeRef, {
-        ...firestoreShape,
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(), // Will only be set on first write
-      }, { merge: true });
+      await setDoc(
+        shapeRef,
+        {
+          ...firestoreShape,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(), // Only set on first write due to merge
+        },
+        { merge: true }
+      );
     });
   } catch (error) {
-    console.error("Error writing shape to Firestore:", error);
+    console.error("[FirestoreSync] Error writing shape:", error);
     throw error;
   }
 }
 
 /**
- * Deletes a shape from Firestore
+ * Deletes a shape from Firestore with retry logic
  * 
  * @param roomId - Room identifier
  * @param shapeId - ID of shape to delete
+ * @returns Promise that resolves when deletion is complete
+ * @throws Error if deletion fails after retries
  */
 export async function deleteShapeFromFirestore(
   roomId: string,
   shapeId: string
 ): Promise<void> {
   try {
-    await withRetry(async () => {
+    await withRetry(async (): Promise<void> => {
       const shapeRef = doc(db, `rooms/${roomId}/shapes`, shapeId);
       await deleteDoc(shapeRef);
     });
   } catch (error) {
-    console.error("Error deleting shape from Firestore:", error);
+    console.error("[FirestoreSync] Error deleting shape:", error);
     throw error;
   }
 }
 
 /**
- * Listens to all shapes in a room
- * Calls callback with added, modified, and removed shapes
+ * Listens to all shapes in a room in real-time
+ * Calls callback with added, modified, and removed shapes on each change
  * 
  * @param roomId - Room identifier
- * @param callback - Called when shapes change
- * @returns Unsubscribe function
+ * @param callback - Called when shapes change with categorized changes
+ * @returns Unsubscribe function to stop listening
  */
 export function listenToShapes(
   roomId: string,
-  callback: (changes: {
-    added: FirestoreShape[];
-    modified: FirestoreShape[];
-    removed: string[];
-  }) => void
+  callback: (changes: ShapeChanges) => void
 ): () => void {
   const shapesRef = collection(db, `rooms/${roomId}/shapes`);
-  const q = query(shapesRef);
+  const shapesQuery = query(shapesRef);
 
-  const unsubscribe = onSnapshot(
-    q,
-    (snapshot: QuerySnapshot) => {
-      const added: FirestoreShape[] = [];
-      const modified: FirestoreShape[] = [];
-      const removed: string[] = [];
+  const handleSnapshot = (snapshot: QuerySnapshot): void => {
+    const changes: ShapeChanges = {
+      added: [],
+      modified: [],
+      removed: [],
+    };
 
-      snapshot.docChanges().forEach((change: DocumentChange) => {
-        const data = change.doc.data() as FirestoreShape;
+    snapshot.docChanges().forEach((change: DocumentChange) => {
+      if (change.type === "added") {
+        changes.added.push(change.doc.data() as FirestoreShape);
+      } else if (change.type === "modified") {
+        changes.modified.push(change.doc.data() as FirestoreShape);
+      } else if (change.type === "removed") {
+        changes.removed.push(change.doc.id);
+      }
+    });
 
-        if (change.type === "added") {
-          added.push(data);
-        } else if (change.type === "modified") {
-          modified.push(data);
-        } else if (change.type === "removed") {
-          removed.push(change.doc.id);
-        }
-      });
+    callback(changes);
+  };
 
-      callback({ added, modified, removed });
-    },
-    (error) => {
-      console.error("Error listening to shapes:", error);
-    }
-  );
+  const handleError = (error: Error): void => {
+    console.error("[FirestoreSync] Error listening to shapes:", error);
+  };
+
+  const unsubscribe = onSnapshot(shapesQuery, handleSnapshot, handleError);
 
   return unsubscribe;
 }
 
 /**
  * Converts Firestore shape to tldraw shape format
+ * Note: Uses type assertions as tldraw types are complex branded types
  * 
  * @param firestoreShape - Shape from Firestore
- * @returns tldraw-compatible shape
+ * @returns Partial tldraw shape (will be validated by tldraw on creation)
  */
-export function firestoreShapeToTldraw(firestoreShape: FirestoreShape): Partial<TLShape> {
+export function firestoreShapeToTldraw(
+  firestoreShape: FirestoreShape
+): Partial<TLShape> {
   return {
-    id: firestoreShape.id as any,
-    type: firestoreShape.type as any,
+    id: firestoreShape.id as TLShape["id"],
+    type: firestoreShape.type as TLShape["type"],
     x: firestoreShape.x,
     y: firestoreShape.y,
     rotation: firestoreShape.rotation,
     props: firestoreShape.props,
-    parentId: firestoreShape.parentId as any,
-    index: firestoreShape.index as any,
+    parentId: firestoreShape.parentId as TLShape["parentId"],
+    index: firestoreShape.index as TLShape["index"],
     opacity: firestoreShape.opacity,
   };
 }
@@ -173,6 +192,13 @@ export function firestoreShapeToTldraw(firestoreShape: FirestoreShape): Partial<
  * @param roomId - Room identifier
  * @param shapes - Array of shapes to write
  * @param userId - ID of user making the changes
+ * @returns Promise that resolves when all writes complete
+ * @throws Error if batch write fails
+ * 
+ * @remarks
+ * Firebase has a limit of 500 operations per batch.
+ * This implementation writes individually with Promise.all for simplicity.
+ * For true batching, use Firestore writeBatch() API.
  */
 export async function batchWriteShapes(
   roomId: string,
@@ -180,44 +206,33 @@ export async function batchWriteShapes(
   userId: string
 ): Promise<void> {
   try {
-    // Firebase has a limit of 500 operations per batch
-    // For simplicity, we'll write them individually
-    // In production, you might want to use batched writes
-    const promises = shapes.map(shape => 
+    const writePromises = shapes.map((shape) =>
       writeShapeToFirestore(roomId, shape, userId)
     );
     
-    await Promise.all(promises);
+    await Promise.all(writePromises);
   } catch (error) {
-    console.error("Error batch writing shapes:", error);
+    console.error("[FirestoreSync] Error batch writing shapes:", error);
     throw error;
   }
 }
 
 /**
  * Gets all shapes in a room (one-time read)
- * Used for initial load
+ * Used for initial load when editor mounts
  * 
  * @param roomId - Room identifier
- * @returns Promise with array of shapes
+ * @returns Promise resolving to array of all shapes in the room
  */
 export async function getAllShapes(roomId: string): Promise<FirestoreShape[]> {
   try {
     const shapesRef = collection(db, `rooms/${roomId}/shapes`);
-    const snapshot = await new Promise<QuerySnapshot>((resolve, reject) => {
-      const unsubscribe = onSnapshot(
-        shapesRef,
-        (snap) => {
-          unsubscribe();
-          resolve(snap);
-        },
-        reject
-      );
-    });
+    const shapesQuery = query(shapesRef);
+    const snapshot = await getDocs(shapesQuery);
 
-    return snapshot.docs.map(doc => doc.data() as FirestoreShape);
+    return snapshot.docs.map((doc) => doc.data() as FirestoreShape);
   } catch (error) {
-    console.error("Error getting all shapes:", error);
+    console.error("[FirestoreSync] Error getting all shapes:", error);
     return [];
   }
 }

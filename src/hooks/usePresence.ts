@@ -3,15 +3,22 @@
  * Manages user presence awareness - who's online and viewing the canvas
  */
 
-import { useState, useEffect } from "react";
-import { listenToUsers, getOnlineUsers } from "../lib/realtimeSync";
-import { UserPresence } from "../types";
+import { useEffect, useState } from "react";
 
+import type { UserPresence } from "../types";
+import { getOnlineUsers, listenToUsers } from "../lib/realtimeSync";
+
+/**
+ * Options for usePresence hook
+ */
 interface UsePresenceOptions {
   currentUserId: string | null;
   enabled?: boolean;
 }
 
+/**
+ * Return type for usePresence hook
+ */
 interface UsePresenceReturn {
   onlineUsers: UserPresence[];
   currentUser: UserPresence | null;
@@ -20,11 +27,20 @@ interface UsePresenceReturn {
 }
 
 /**
+ * Extended UserPresence with uid field
+ */
+interface UserPresenceWithId extends UserPresence {
+  uid: string;
+}
+
+/**
  * Hook to track online users and their presence
  * - Listens to all users in the room
  * - Filters for online users only
  * - Separates current user from others
  * - Provides user count
+ * 
+ * @returns Object containing onlineUsers, currentUser, userCount, and error state
  */
 export function usePresence({
   currentUserId,
@@ -34,7 +50,7 @@ export function usePresence({
   const [error, setError] = useState<Error | null>(null);
 
   /**
-   * Listen to users in real-time
+   * Listen to users in real-time and maintain local state
    */
   useEffect(() => {
     if (!currentUserId || !enabled) {
@@ -42,19 +58,19 @@ export function usePresence({
       return;
     }
 
-    let mounted = true;
+    let isMounted = true;
 
-    // Load initial users
-    const loadInitialUsers = async () => {
+    // Load initial users from database
+    const loadInitialUsers = async (): Promise<void> => {
       try {
         const users = await getOnlineUsers();
-        if (mounted) {
+        if (isMounted) {
           setUsersMap(users);
         }
       } catch (err) {
-        console.error("Error loading initial users:", err);
-        if (mounted) {
-          setError(err as Error);
+        console.error("[usePresence] Error loading initial users:", err);
+        if (isMounted) {
+          setError(err instanceof Error ? err : new Error("Failed to load users"));
         }
       }
     };
@@ -63,28 +79,29 @@ export function usePresence({
 
     // Listen to real-time updates
     const unsubscribe = listenToUsers((users) => {
-      if (mounted) {
+      if (isMounted) {
         setUsersMap(users);
       }
     });
 
-    return () => {
-      mounted = false;
+    return (): void => {
+      isMounted = false;
       unsubscribe();
     };
   }, [currentUserId, enabled]);
 
-  // Convert map to array and separate current user
-  const allUsers = Object.entries(usersMap).map(([userId, userData]) => ({
+  // Convert map to array and add uid field
+  const allUsers: UserPresenceWithId[] = Object.entries(usersMap).map(([userId, userData]) => ({
     ...userData,
     uid: userId,
-  })) as (UserPresence & { uid: string })[];
+  }));
 
+  // Separate current user from others
   const currentUser = currentUserId
-    ? (allUsers.find(u => u.uid === currentUserId) || null)
+    ? allUsers.find((u) => u.uid === currentUserId) ?? null
     : null;
 
-  const onlineUsers = allUsers.filter(u => u.uid !== currentUserId);
+  const onlineUsers = allUsers.filter((u) => u.uid !== currentUserId);
 
   return {
     onlineUsers,

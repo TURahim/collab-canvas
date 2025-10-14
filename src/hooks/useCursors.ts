@@ -3,19 +3,22 @@
  * Manages real-time cursor tracking and synchronization
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Editor } from "@tldraw/tldraw";
-import { UserPresence } from "../types";
+import type { Editor } from "@tldraw/tldraw";
+import { useEffect, useRef, useState } from "react";
+
+import type { UserPresence } from "../types";
 import {
-  updateCursorPosition,
-  updateUserPresence,
   listenToUsers,
   markUserOffline,
   setupPresenceHeartbeat,
+  updateCursorPosition,
+  updateUserPresence,
 } from "../lib/realtimeSync";
-import { screenToPage } from "../lib/tldrawHelpers";
-import { throttle } from "../lib/tldrawHelpers";
+import { throttle } from "../lib/utils";
 
+/**
+ * Options for useCursors hook
+ */
 interface UseCursorsOptions {
   editor: Editor | null;
   userId: string | null;
@@ -24,10 +27,20 @@ interface UseCursorsOptions {
   enabled?: boolean;
 }
 
+/**
+ * Return type for useCursors hook
+ */
 interface UseCursorsReturn {
   remoteCursors: Record<string, UserPresence>;
   isTracking: boolean;
   error: Error | null;
+}
+
+/**
+ * tldraw pointer event info structure
+ */
+interface PointerEventInfo {
+  point?: { x: number; y: number };
 }
 
 /**
@@ -36,6 +49,8 @@ interface UseCursorsReturn {
  * - Listens to other users' cursor positions
  * - Manages presence (online/offline status)
  * - Auto-cleanup on unmount
+ * 
+ * @returns Object containing remoteCursors, isTracking status, and error state
  */
 export function useCursors({
   editor,
@@ -45,7 +60,7 @@ export function useCursors({
   enabled = true,
 }: UseCursorsOptions): UseCursorsReturn {
   const [remoteCursors, setRemoteCursors] = useState<Record<string, UserPresence>>({});
-  const [isTracking, setIsTracking] = useState(false);
+  const [isTracking, setIsTracking] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -53,13 +68,12 @@ export function useCursors({
 
   // Throttled cursor update function (30Hz = every 33ms)
   const throttledUpdateCursor = useRef(
-    throttle((...args: unknown[]) => {
-      const [userId, cursor] = args as [string, { x: number; y: number }];
-      updateCursorPosition(userId, cursor).catch((err) => {
-        console.error("Failed to update cursor:", err);
+    throttle((uid: string, cursor: { x: number; y: number }) => {
+      updateCursorPosition(uid, cursor).catch((err) => {
+        console.error("[useCursors] Failed to update cursor:", err);
       });
     }, 33)
-  ).current as (userId: string, cursor: { x: number; y: number }) => void;
+  ).current;
 
 
   /**
@@ -75,44 +89,48 @@ export function useCursors({
     try {
       // Use tldraw's pointer event listener instead of DOM events
       // This integrates properly with tldraw's event system
-      const handlePointer = (info: any) => {
-        if (!info.point) return;
+      const handlePointerMove = (info: PointerEventInfo): void => {
+        if (!info.point) {
+          return;
+        }
         
         try {
           // The point is already in page coordinates from tldraw
           throttledUpdateCursor(userId, info.point);
         } catch (err) {
-          console.error("Error updating cursor:", err);
+          console.error("[useCursors] Error updating cursor:", err);
         }
       };
 
       // Listen to pointer move via tldraw's event system
-      editor.on("pointer-move" as any, handlePointer);
+      // Note: tldraw's event system types are complex, so we use type assertion
+      editor.on("pointer-move" as "pointer-move", handlePointerMove);
       setIsTracking(true);
 
       // Cleanup
-      return () => {
-        editor.off("pointer-move" as any, handlePointer);
+      return (): void => {
+        editor.off("pointer-move" as "pointer-move", handlePointerMove);
         setIsTracking(false);
       };
     } catch (err) {
-      console.error("Error setting up cursor tracking:", err);
-      setError(err as Error);
+      console.error("[useCursors] Error setting up cursor tracking:", err);
+      setError(err instanceof Error ? err : new Error("Failed to set up cursor tracking"));
       setIsTracking(false);
     }
   }, [editor, userId, userName, enabled, throttledUpdateCursor]);
 
   /**
-   * Set up user presence and listen to other users
+   * Set up user presence and listen to other users' cursors
+   * Implements performance optimization to prevent unnecessary re-renders
    */
   useEffect(() => {
     if (!userId || !userName || !enabled) {
       return;
     }
 
-    let mounted = true;
+    let isMounted = true;
 
-    const setupPresence = async () => {
+    const setupPresence = async (): Promise<void> => {
       try {
         // Update user presence in Realtime DB
         await updateUserPresence(userId, userName, userColor);
@@ -121,44 +139,48 @@ export function useCursors({
         heartbeatIntervalRef.current = setupPresenceHeartbeat(userId);
 
         // Listen to all users' cursors
-        if (mounted) {
+        if (isMounted) {
           unsubscribeRef.current = listenToUsers((users) => {
-            if (!mounted) return;
+            if (!isMounted) {
+              return;
+            }
             
             // Filter out current user
-            const { [userId]: _currentUser, ...others } = users;
+            const { [userId]: _currentUser, ...remoteCursorsMap } = users;
             
             // Only update if cursors actually changed (prevent unnecessary re-renders)
-            setRemoteCursors((prev) => {
-              const prevKeys = Object.keys(prev).sort().join(',');
-              const newKeys = Object.keys(others).sort().join(',');
+            setRemoteCursors((prevCursors) => {
+              const prevKeys = Object.keys(prevCursors).sort().join(",");
+              const newKeys = Object.keys(remoteCursorsMap).sort().join(",");
               
               // Quick check: if user list changed, update
               if (prevKeys !== newKeys) {
-                return others;
+                return remoteCursorsMap;
               }
               
-              // Deep check: if cursor positions changed, update
-              for (const [uid, user] of Object.entries(others)) {
-                const prevUser = prev[uid];
-                if (!prevUser || 
-                    prevUser.cursor?.x !== user.cursor?.x || 
-                    prevUser.cursor?.y !== user.cursor?.y ||
-                    prevUser.name !== user.name ||
-                    prevUser.color !== user.color) {
-                  return others;
+              // Deep check: if cursor positions or user data changed, update
+              for (const [uid, user] of Object.entries(remoteCursorsMap)) {
+                const prevUser = prevCursors[uid];
+                if (
+                  !prevUser ||
+                  prevUser.cursor?.x !== user.cursor?.x ||
+                  prevUser.cursor?.y !== user.cursor?.y ||
+                  prevUser.name !== user.name ||
+                  prevUser.color !== user.color
+                ) {
+                  return remoteCursorsMap;
                 }
               }
               
-              // No changes, keep previous reference
-              return prev;
+              // No changes, keep previous reference to avoid re-render
+              return prevCursors;
             });
           });
         }
       } catch (err) {
-        console.error("Error setting up presence:", err);
-        if (mounted) {
-          setError(err as Error);
+        console.error("[useCursors] Error setting up presence:", err);
+        if (isMounted) {
+          setError(err instanceof Error ? err : new Error("Failed to set up presence"));
         }
       }
     };
@@ -166,25 +188,25 @@ export function useCursors({
     setupPresence();
 
     // Cleanup on unmount
-    return () => {
-      mounted = false;
+    return (): void => {
+      isMounted = false;
 
-      // Clear heartbeat
-      if (heartbeatIntervalRef.current) {
+      // Clear heartbeat interval
+      if (heartbeatIntervalRef.current !== null) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
       }
 
-      // Unsubscribe from listeners
-      if (unsubscribeRef.current) {
+      // Unsubscribe from Realtime Database listeners
+      if (unsubscribeRef.current !== null) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }
 
-      // Mark user as offline
+      // Mark user as offline on disconnect
       if (userId) {
         markUserOffline(userId).catch((err) => {
-          console.error("Error marking user offline:", err);
+          console.error("[useCursors] Error marking user offline:", err);
         });
       }
     };

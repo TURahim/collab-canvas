@@ -3,7 +3,7 @@
  * Defines core types for User, Cursor, and Shape entities
  */
 
-import { Timestamp } from "firebase/firestore";
+import type { Timestamp } from "firebase/firestore";
 
 /**
  * User represents an authenticated user in the system

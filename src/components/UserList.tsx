@@ -7,6 +7,9 @@
 
 import { usePresence } from "../hooks/usePresence";
 
+/**
+ * Props for UserList component
+ */
 interface UserListProps {
   currentUserId: string | null;
   currentUserName: string | null;
@@ -14,24 +17,30 @@ interface UserListProps {
 }
 
 /**
- * Sidebar component showing all online users
- * - Current user highlighted at top
- * - Other users listed below
- * - User count badge
+ * UserList - Sidebar displaying all online users
+ * 
+ * Features:
+ * - Current user highlighted at top with "You" badge
+ * - Other users listed below with online indicators
+ * - User count badge in header
  * - Color indicators for each user
+ * - Empty state when no other users online
+ * 
+ * @param props - Component props
+ * @returns User list sidebar
  */
 export default function UserList({
   currentUserId,
   currentUserName,
   currentUserColor,
-}: UserListProps) {
+}: UserListProps): React.JSX.Element | null {
   const { onlineUsers, currentUser, userCount, error } = usePresence({
     currentUserId,
     enabled: !!currentUserId,
   });
 
   if (error) {
-    console.error("Presence error:", error);
+    console.error("[UserList] Presence error:", error);
   }
 
   if (!currentUserId || !currentUserName) {
@@ -85,9 +94,9 @@ export default function UserList({
           {/* Other Users */}
           {onlineUsers.length > 0 ? (
             <div className="space-y-1">
-              {onlineUsers.map((user, index) => (
+              {onlineUsers.map((user) => (
                 <div
-                  key={`${user.name}-${index}`}
+                  key={user.name}
                   className="rounded-lg border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center gap-3">

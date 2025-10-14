@@ -5,19 +5,38 @@
 
 "use client";
 
-import { useState, FormEvent } from "react";
+import type { FormEvent } from "react";
+import { useState } from "react";
 
+/**
+ * Props for AuthModal component
+ */
 interface AuthModalProps {
   onSubmit: (name: string) => Promise<void>;
   loading?: boolean;
   error?: string | null;
 }
 
-export default function AuthModal({ onSubmit, loading = false, error }: AuthModalProps) {
-  const [name, setName] = useState("");
+// Validation constants
+const MIN_NAME_LENGTH = 2;
+const MAX_NAME_LENGTH = 30;
+
+/**
+ * AuthModal - Collects user's display name before entering the canvas
+ * Features:
+ * - Name validation (2-30 characters)
+ * - Loading state with spinner
+ * - Error display (local and prop-based)
+ * - Accessible form with proper labels
+ * 
+ * @param props - Component props
+ * @returns Modal dialog for name entry
+ */
+export default function AuthModal({ onSubmit, loading = false, error }: AuthModalProps): React.JSX.Element {
+  const [name, setName] = useState<string>("");
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setLocalError(null);
 
@@ -29,13 +48,13 @@ export default function AuthModal({ onSubmit, loading = false, error }: AuthModa
       return;
     }
 
-    if (trimmedName.length < 2) {
-      setLocalError("Name must be at least 2 characters");
+    if (trimmedName.length < MIN_NAME_LENGTH) {
+      setLocalError(`Name must be at least ${MIN_NAME_LENGTH} characters`);
       return;
     }
 
-    if (trimmedName.length > 30) {
-      setLocalError("Name must be less than 30 characters");
+    if (trimmedName.length > MAX_NAME_LENGTH) {
+      setLocalError(`Name must be less than ${MAX_NAME_LENGTH} characters`);
       return;
     }
 
@@ -46,7 +65,7 @@ export default function AuthModal({ onSubmit, loading = false, error }: AuthModa
     }
   };
 
-  const displayError = error || localError;
+  const displayError = error ?? localError;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">

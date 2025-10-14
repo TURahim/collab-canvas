@@ -1,11 +1,12 @@
 /**
  * tldraw Helper Utilities
- * Provides coordinate conversion and shape serialization for tldraw integration
+ * Provides coordinate conversion and shape validation for tldraw integration
+ * 
+ * Note: throttle and debounce are imported from utils.ts to avoid duplication
  */
 
-import { Editor } from "@tldraw/tldraw";
-import { Timestamp } from "firebase/firestore";
-import { Shape, TldrawShape, Point } from "../types";
+import type { Editor } from "@tldraw/tldraw";
+import type { Point, Shape, TldrawShape } from "../types";
 
 /**
  * Converts screen coordinates to page coordinates
@@ -14,6 +15,9 @@ import { Shape, TldrawShape, Point } from "../types";
  * @param editor - The tldraw editor instance
  * @param screenPoint - Point in screen coordinates (pixels from viewport top-left)
  * @returns Point in page coordinates (accounting for zoom and pan)
+ * 
+ * @example
+ * const pagePoint = screenToPage(editor, { x: 100, y: 200 });
  */
 export function screenToPage(editor: Editor, screenPoint: Point): Point {
   const pagePoint = editor.screenToPage(screenPoint);
@@ -30,6 +34,9 @@ export function screenToPage(editor: Editor, screenPoint: Point): Point {
  * @param editor - The tldraw editor instance
  * @param pagePoint - Point in page coordinates (canvas space)
  * @returns Point in screen coordinates (viewport pixels)
+ * 
+ * @example
+ * const screenPoint = pageToScreen(editor, { x: 500, y: 300 });
  */
 export function pageToScreen(editor: Editor, pagePoint: Point): Point {
   const screenPoint = editor.pageToScreen(pagePoint);
@@ -45,16 +52,19 @@ export function pageToScreen(editor: Editor, pagePoint: Point): Point {
  * 
  * @param tldrawShape - Shape from tldraw editor
  * @param userId - ID of user who created/modified the shape
- * @returns Shape object ready for Firestore persistence
+ * @returns Shape object ready for Firestore persistence (without timestamps)
  */
-export function serializeShape(tldrawShape: TldrawShape, userId: string): Omit<Shape, 'createdAt' | 'updatedAt'> {
+export function serializeShape(
+  tldrawShape: TldrawShape,
+  userId: string
+): Omit<Shape, "createdAt" | "updatedAt"> {
   return {
     id: tldrawShape.id,
     type: tldrawShape.type,
     x: tldrawShape.x,
     y: tldrawShape.y,
-    rotation: tldrawShape.rotation || 0,
-    props: tldrawShape.props || {},
+    rotation: tldrawShape.rotation ?? 0,
+    props: tldrawShape.props ?? {},
     createdBy: userId,
   };
 }
@@ -72,33 +82,33 @@ export function deserializeShape(firestoreShape: Shape): TldrawShape {
     type: firestoreShape.type,
     x: firestoreShape.x,
     y: firestoreShape.y,
-    rotation: firestoreShape.rotation || 0,
-    props: firestoreShape.props || {},
+    rotation: firestoreShape.rotation ?? 0,
+    props: firestoreShape.props ?? {},
   };
 }
 
 /**
- * Validates if a shape object has required properties for serialization
+ * Type guard to validate if a shape object has required properties
  * Used to filter out invalid or incomplete shapes before sync
  * 
- * @param shape - Shape object to validate
- * @returns true if shape has all required properties
+ * @param shape - Partial shape object to validate
+ * @returns Type predicate indicating if shape is valid TldrawShape
  */
 export function isValidShape(shape: Partial<TldrawShape>): shape is TldrawShape {
   return (
-    typeof shape.id === 'string' &&
-    typeof shape.type === 'string' &&
-    typeof shape.x === 'number' &&
-    typeof shape.y === 'number'
+    typeof shape.id === "string" &&
+    typeof shape.type === "string" &&
+    typeof shape.x === "number" &&
+    typeof shape.y === "number"
   );
 }
 
 /**
- * Extracts shape data from tldraw editor's store
- * Filters for valid shape records only
+ * Extracts all valid shapes from tldraw editor's current page
+ * Filters out invalid shapes and maps to TldrawShape format
  * 
  * @param editor - The tldraw editor instance
- * @returns Array of all valid shapes in the editor
+ * @returns Array of all valid shapes on the current page
  */
 export function getEditorShapes(editor: Editor): TldrawShape[] {
   const shapes = editor.getCurrentPageShapes();
@@ -114,52 +124,7 @@ export function getEditorShapes(editor: Editor): TldrawShape[] {
     .filter(isValidShape);
 }
 
-/**
- * Throttles a function to execute at most once per specified interval
- * Used for cursor updates (30Hz = every 33ms)
- * 
- * @param func - Function to throttle
- * @param limit - Minimum time between executions in milliseconds
- * @returns Throttled function
- */
-export function throttle<T extends (...args: unknown[]) => unknown>(
-  func: T,
-  limit: number
-): (...args: Parameters<T>) => void {
-  let inThrottle: boolean;
-  let lastResult: ReturnType<T>;
-
-  return function (this: unknown, ...args: Parameters<T>): void {
-    if (!inThrottle) {
-      inThrottle = true;
-      lastResult = func.apply(this, args) as ReturnType<T>;
-      setTimeout(() => (inThrottle = false), limit);
-    }
-  };
-}
-
-/**
- * Debounces a function to execute only after it stops being called
- * Used for shape updates (300ms delay after last change)
- * 
- * @param func - Function to debounce
- * @param wait - Time to wait after last call in milliseconds
- * @returns Debounced function
- */
-export function debounce<T extends (...args: unknown[]) => unknown>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
-
-  return function (this: unknown, ...args: Parameters<T>): void {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-    timeout = setTimeout(() => {
-      func.apply(this, args);
-      timeout = null;
-    }, wait);
-  };
-}
+// Re-export throttle and debounce from utils to maintain backward compatibility
+// These were previously defined here but have been consolidated in utils.ts
+export { debounce, throttle } from "./utils";
 

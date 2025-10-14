@@ -168,7 +168,7 @@ pnpm test:coverage
 
 ## 🌐 **Live Demo**
 
-**Production URL:** [https://collab-canvas-axbl1m49g-trahim-8750s-projects.vercel.app](https://collab-canvas-axbl1m49g-trahim-8750s-projects.vercel.app)
+**Production URL:** [https://collab-canvas-12wy0oeb5-trahim-8750s-projects.vercel.app](https://collab-canvas-12wy0oeb5-trahim-8750s-projects.vercel.app)
 
 **Features:**
 - Real-time multiplayer drawing

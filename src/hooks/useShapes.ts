@@ -92,7 +92,7 @@ export function useShapes({
           shapes.forEach((firestoreShape) => {
             const tldrawShape = firestoreShapeToTldraw(firestoreShape);
             try {
-              editor.createShape(tldrawShape);
+              editor.createShape(tldrawShape as TLShape);
             } catch (err) {
               // Shape might already exist or be invalid
               console.warn("[useShapes] Could not create shape:", err);
@@ -211,9 +211,9 @@ export function useShapes({
             // Check if shape already exists
             const existing = editor.getShape(firestoreShape.id);
             if (existing) {
-              editor.updateShape(tldrawShape);
+              editor.updateShape(tldrawShape as TLShape);
             } else {
-              editor.createShape(tldrawShape);
+              editor.createShape(tldrawShape as TLShape);
             }
           } catch (err) {
             console.warn("[useShapes] Could not add shape:", err);

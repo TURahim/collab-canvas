@@ -120,7 +120,14 @@ export default function CollabCanvas() {
   // User is authenticated and has a display name - show canvas
   return (
     <div className="fixed inset-0">
-      <Tldraw onMount={handleEditorMount} />
+      <Tldraw 
+        onMount={handleEditorMount}
+        // Optional: Add license key if you have one
+        // This removes the watermark on paid tiers
+        {...(process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY && {
+          licenseKey: process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY
+        })}
+      />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList
         currentUserId={user?.uid || null}

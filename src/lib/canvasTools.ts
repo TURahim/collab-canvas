@@ -1,98 +1,108 @@
 /**
- * Canvas Tool Functions
+ * Canvas Tools - Shape creation and manipulation utilities for tldraw
  * 
- * Executes AI commands by manipulating the tldraw canvas
- * These are the actual functions that create, move, and transform shapes
- */
-
-import type { Editor, TLShapeId } from '@tldraw/tldraw';
-import { toRichText } from '@tldraw/tldraw';
-import { nanoid } from 'nanoid';
-
-/**
- * tldraw color type - only 13 valid colors
- */
-type TLDefaultColorStyle = 'black' | 'grey' | 'light-violet' | 'violet' | 
-  'blue' | 'light-blue' | 'yellow' | 'orange' | 'green' | 'light-green' | 
-  'light-red' | 'red' | 'white';
-
-/**
- * Map user-friendly color names to tldraw's 13 valid colors
- */
-const TLDRAW_COLOR_MAP: Record<string, TLDefaultColorStyle> = {
-  // Direct mappings - tldraw's 13 colors
-  'black': 'black',
-  'white': 'white',
-  'grey': 'grey',
-  'gray': 'grey', // US spelling
-  
-  // Reds
-  'red': 'red',
-  'light-red': 'light-red',
-  'lightred': 'light-red',
-  'pink': 'light-red', // pink → light-red
-  'maroon': 'red',
-  
-  // Blues
-  'blue': 'blue',
-  'light-blue': 'light-blue',
-  'lightblue': 'light-blue',
-  'cyan': 'light-blue', // cyan → light-blue
-  'teal': 'light-blue', // teal → light-blue
-  'navy': 'blue',
-  
-  // Greens
-  'green': 'green',
-  'light-green': 'light-green',
-  'lightgreen': 'light-green',
-  'lime': 'light-green', // lime → light-green
-  
-  // Purples/Violets
-  'violet': 'violet',
-  'purple': 'violet', // purple → violet
-  'light-violet': 'light-violet',
-  'lightviolet': 'light-violet',
-  'light-purple': 'light-violet',
-  'lightpurple': 'light-violet',
-  'indigo': 'violet',
-  
-  // Yellows/Oranges
-  'yellow': 'yellow',
-  'gold': 'yellow',
-  'tan': 'yellow',
-  'orange': 'orange',
-  'brown': 'orange', // brown → orange (closest match)
-};
-
-/**
- * Default sizes for different shape types
- */
-const DEFAULT_SIZES: Record<string, { width: number; height: number }> = {
-  rectangle: { width: 200, height: 150 },
-  ellipse: { width: 200, height: 200 },
-  circle: { width: 200, height: 200 }, // Circle is an ellipse with equal dimensions
-  triangle: { width: 200, height: 200 },
-  arrow: { width: 200, height: 0 },
-  text: { width: 200, height: 50 },
-};
-
-/**
- * Map color names to tldraw's valid color values
+ * This module provides high-level functions for creating and manipulating shapes
+ * on the collaborative canvas. It includes:
  * 
- * @param color - User-provided color name
- * @returns Valid tldraw color, defaults to 'blue' for visibility
+ * - Basic shape creation (rectangles, text, circles, arrows, etc.)
+ * - Shape manipulation (moving, transforming)
+ * - Layout utilities (arranging, grid creation)
+ * - Complex UI components (login forms, cards, navigation bars, checkbox lists)
+ * 
+ * All functions follow a consistent pattern:
+ * 1. Accept editor instance and optional parameters
+ * 2. Calculate viewport center for positioning
+ * 3. Create shapes using tldraw API
+ * 4. Return array of created shape IDs
+ * 5. Select created shapes automatically
  */
-export function mapToTldrawColor(color: string | undefined): TLDefaultColorStyle {
-  if (!color) return 'blue'; // Default to blue (more visible than black)
-  
-  const lowerColor = color.toLowerCase().trim();
-  return TLDRAW_COLOR_MAP[lowerColor] || 'blue'; // Default to blue for unknown colors
+
+import { type Editor, type TLShapeId, toRichText, createShapeId } from '@tldraw/tldraw';
+
+/**
+ * Shape definition interface for batch creation
+ * Used internally to define multiple shapes before creating them
+ */
+interface ShapeDefinition {
+  shapeType: 'rectangle' | 'text';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text?: string;
+  fontSize?: number;
+  color?: string;
 }
 
 /**
- * Get the center point of the current viewport
+ * Valid tldraw color values
+ * These are the color names supported by tldraw's shape props
  */
-export function getViewportCenter(editor: Editor): { x: number; y: number } {
+type TldrawColor = 
+  | 'black' 
+  | 'grey' 
+  | 'light-violet' 
+  | 'violet' 
+  | 'blue' 
+  | 'light-blue' 
+  | 'yellow' 
+  | 'orange' 
+  | 'green' 
+  | 'light-green' 
+  | 'light-red' 
+  | 'red';
+
+/**
+ * Maps user-friendly color names to tldraw color values
+ * Provides backwards compatibility and easier color selection
+ * 
+ * @param color - User-provided color string
+ * @returns Valid tldraw color value
+ */
+function mapToTldrawColor(color: string): TldrawColor {
+  const colorMap: Record<string, TldrawColor> = {
+  'black': 'black',
+  'grey': 'grey',
+    'gray': 'grey',
+    'light-violet': 'light-violet',
+    'violet': 'violet',
+    'purple': 'violet',
+  'blue': 'blue',
+  'light-blue': 'light-blue',
+  'yellow': 'yellow',
+  'orange': 'orange',
+    'green': 'green',
+    'light-green': 'light-green',
+    'light-red': 'light-red',
+    'red': 'red',
+  };
+
+  const normalizedColor = color.toLowerCase();
+  return colorMap[normalizedColor] || 'black';
+}
+
+/**
+ * Maps font size (in pixels) to tldraw text size values
+ * Tldraw uses named sizes: s, m, l, xl
+ * 
+ * @param fontSize - Font size in pixels
+ * @returns Tldraw text size value
+ */
+function mapFontSize(fontSize: number): 's' | 'm' | 'l' | 'xl' {
+  if (fontSize <= 16) return 's';
+  if (fontSize <= 24) return 'm';
+  if (fontSize <= 32) return 'l';
+  return 'xl';
+}
+
+/**
+ * Gets the center point of the current viewport
+ * Used to position shapes in the middle of the user's view
+ * 
+ * @param editor - tldraw editor instance
+ * @returns Object with x and y coordinates of viewport center
+ */
+function getViewportCenter(editor: Editor): { x: number; y: number } {
   const viewport = editor.getViewportPageBounds();
   return {
     x: viewport.x + viewport.width / 2,
@@ -101,890 +111,600 @@ export function getViewportCenter(editor: Editor): { x: number; y: number } {
 }
 
 /**
+ * Creates multiple shapes from an array of shape definitions
+ * Handles both rectangles and text shapes
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapes - Array of shape definitions to create
+ * @returns Array of created shape IDs
+ */
+function createMultiShapeLayout(
+  editor: Editor,
+  shapes: ShapeDefinition[]
+): TLShapeId[] {
+  const createdIds: TLShapeId[] = [];
+
+  for (const shape of shapes) {
+    if (shape.shapeType === 'rectangle') {
+      // Create geo (rectangle) shape
+      const shapeId = createShapeId();
+      editor.createShape({
+        id: shapeId,
+        type: 'geo',
+        x: shape.x - shape.width / 2,
+        y: shape.y - shape.height / 2,
+        props: {
+          geo: 'rectangle',
+          w: shape.width,
+          h: shape.height,
+          color: shape.color as TldrawColor || 'black',
+          fill: 'solid',
+        },
+      });
+      createdIds.push(shapeId);
+    } else if (shape.shapeType === 'text') {
+      // Create text shape
+      const shapeId = createShapeId();
+      editor.createShapes([
+        {
+          id: shapeId,
+          type: 'text',
+          x: shape.x - shape.width / 2,
+          y: shape.y - shape.height / 2,
+          props: {
+            richText: toRichText(shape.text || ''),
+            w: shape.width,
+            size: mapFontSize(shape.fontSize || 16),
+            color: shape.color as TldrawColor || 'black',
+            autoSize: false,
+          },
+        },
+      ]);
+      createdIds.push(shapeId);
+    }
+  }
+
+  return createdIds;
+}
+
+// ==========================================
+// BASIC SHAPE CREATION FUNCTIONS
+// ==========================================
+
+/**
  * Create a basic shape on the canvas
  * 
- * @param editor - The tldraw editor instance
- * @param params - Shape parameters
- * @returns The ID of the created shape
+ * @param editor - tldraw editor instance
+ * @param type - Shape type ('rectangle', 'circle', 'triangle', 'hexagon', 'diamond', 'text')
+ * @param x - X coordinate (default: viewport center)
+ * @param y - Y coordinate (default: viewport center)
+ * @param width - Shape width (default: 200)
+ * @param height - Shape height (default: 150)
+ * @param color - Shape color (default: 'black')
+ * @returns Created shape ID
  */
-export function createShape(
-  editor: Editor,
-  params: {
-    shapeType: 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'arrow';
+export interface CreateShapeParams {
+  type: 'rectangle' | 'circle' | 'triangle' | 'hexagon' | 'diamond' | 'text';
     x?: number;
     y?: number;
     width?: number;
     height?: number;
     color?: string;
-  }
+  text?: string;
+}
+
+export function createShape(
+  editor: Editor,
+  params: CreateShapeParams
 ): TLShapeId {
-  const { shapeType, x, y, width, height, color } = params;
-
-  // Validate shape type
-  const validTypes = ['rectangle', 'ellipse', 'circle', 'triangle', 'arrow'];
-  if (!validTypes.includes(shapeType)) {
-    throw new Error(`Invalid shape type: ${shapeType}. Must be one of: ${validTypes.join(', ')}`);
+  if (!editor) {
+    throw new Error('Editor is required');
   }
 
-  // Get position (default to center if not provided)
   const center = getViewportCenter(editor);
-  const posX = x ?? center.x;
-  const posY = y ?? center.y;
+  const {
+    type,
+    x = center.x,
+    y = center.y,
+    width = 200,
+    height = 150,
+    color = 'black',
+    text = '',
+  } = params;
 
-  // Get size (use defaults if not provided)
-  const defaultSize = DEFAULT_SIZES[shapeType];
-  const shapeWidth = width ?? defaultSize.width;
-  const shapeHeight = height ?? defaultSize.height;
+  console.log(`[createShape] Creating ${type} at (${x}, ${y})`);
 
-  // Map color to tldraw's valid colors
-  const tlColor = mapToTldrawColor(color);
-
-  // Generate unique ID
-  const shapeId = `shape:${nanoid()}` as TLShapeId;
-
-  // Create the shape based on type
-  if (shapeType === 'arrow') {
-    // Arrows are handled differently in tldraw
-    editor.createShape({
+  if (type === 'text') {
+    const shapeId = createShapeId();
+    editor.createShapes([
+      {
       id: shapeId,
-      type: 'arrow',
-      x: posX,
-      y: posY,
+        type: 'text',
+        x: x - width / 2,
+        y: y - height / 2,
       props: {
-        color: tlColor,
-        start: { x: 0, y: 0 },
-        end: { x: shapeWidth, y: 0 },
+          richText: toRichText(text),
+          w: width,
+          size: 'm',
+          color: mapToTldrawColor(color),
+          autoSize: false,
+        },
       },
-    });
+    ]);
+    editor.select(shapeId);
+    return shapeId;
   } else {
-    // Geo shapes (rectangle, ellipse, circle, triangle)
-    let geoType: 'rectangle' | 'ellipse' | 'triangle' = 'rectangle';
-    if (shapeType === 'ellipse' || shapeType === 'circle') geoType = 'ellipse';
-    if (shapeType === 'triangle') geoType = 'triangle';
-
-    // For circles, ensure width equals height
-    let finalWidth = shapeWidth;
-    let finalHeight = shapeHeight;
-    if (shapeType === 'circle') {
-      // Use the larger of width/height, or width if both are provided
-      const size = Math.max(shapeWidth, shapeHeight);
-      finalWidth = size;
-      finalHeight = size;
-    }
-
+    const shapeId = createShapeId();
     editor.createShape({
       id: shapeId,
       type: 'geo',
-      x: posX - finalWidth / 2,
-      y: posY - finalHeight / 2,
+      x: x - width / 2,
+      y: y - height / 2,
       props: {
-        geo: geoType,
-        w: finalWidth,
-        h: finalHeight,
-        color: tlColor,
+        geo: type,
+        w: width,
+        h: height,
+        color: mapToTldrawColor(color),
+        fill: 'solid',
       },
     });
+    editor.select(shapeId);
+    return shapeId;
   }
-
-  // Select the created shape
-  editor.select(shapeId);
-
-  return shapeId;
 }
 
 /**
  * Create a text shape on the canvas
  * 
- * @param editor - The tldraw editor instance
- * @param params - Text shape parameters
- * @returns The ID of the created shape
+ * @param editor - tldraw editor instance
+ * @param text - Text content
+ * @param x - X coordinate (default: viewport center)
+ * @param y - Y coordinate (default: viewport center)
+ * @param fontSize - Font size (default: 16)
+ * @param color - Text color (default: 'black')
+ * @returns Created shape ID
  */
-export function createTextShape(
-  editor: Editor,
-  params: {
+export interface CreateTextShapeParams {
     text: string;
     x?: number;
     y?: number;
     fontSize?: number;
     color?: string;
   }
-): TLShapeId {
-  const { text, x, y, fontSize, color } = params;
 
-  // Validate text
-  if (!text || text.trim().length === 0) {
-    throw new Error('Text cannot be empty');
-  }
-
-  // Validate text length (max 500 characters)
-  if (text.length > 500) {
-    throw new Error('Text is too long (max 500 characters)');
-  }
-
-  // Get position (default to center if not provided)
-  const center = getViewportCenter(editor);
-  const posX = x ?? center.x;
-  const posY = y ?? center.y;
-
-  // Default font size
-  const textFontSize = fontSize ?? 24;
-
-  // Map color to tldraw's valid colors
-  const tlColor = mapToTldrawColor(color);
-
-  // Generate unique ID
-  const shapeId = `shape:${nanoid()}` as TLShapeId;
-
-  // Calculate approximate width based on text length
-  const estimatedWidth = Math.max(200, text.length * (textFontSize * 0.6));
-
-  // Map font size to tldraw size (s, m, l, xl)
-  let tlSize: 's' | 'm' | 'l' | 'xl' = 'm';
-  if (textFontSize <= 16) {
-    tlSize = 's';
-  } else if (textFontSize <= 24) {
-    tlSize = 'm';
-  } else if (textFontSize <= 32) {
-    tlSize = 'l';
-  } else {
-    tlSize = 'xl';
-  }
-
-  // Create the text shape
-  // Create text shape using richText format (tldraw v4 requirement)
-  // Note: Since tldraw text is left-aligned by default, we adjust the x position
-  // Using 3.0 shifts the box left so left-aligned text appears more centered
-  editor.createShapes([{
-    id: shapeId,
-    type: 'text',
-    x: posX - estimatedWidth / 3,
-    y: posY - textFontSize / 2,
-    props: {
-      richText: toRichText(text.trim()),
-      size: tlSize,
-      color: tlColor,
-      w: estimatedWidth,
-      autoSize: false,
-    },
-  }]);
-
-  // Select the created shape
-  editor.select(shapeId);
-
-  return shapeId;
-}
-
-/**
- * =============================================================================
- * MANIPULATION COMMANDS (Commands 3-4)
- * =============================================================================
- */
-
-/**
- * Get target shapes based on target parameter
- * 
- * @param editor - tldraw editor instance
- * @param target - "selected", "all", or shape ID
- * @returns Array of shapes
- */
-export function getTargetShapes(
+export function createTextShape(
   editor: Editor,
-  target: string
-): Array<any> {
+  params: CreateTextShapeParams
+): TLShapeId {
   if (!editor) {
     throw new Error('Editor is required');
   }
 
-  let shapes: Array<any> = [];
+  const center = getViewportCenter(editor);
+  const {
+    text,
+    x = center.x,
+    y = center.y,
+    fontSize = 16,
+    color = 'black',
+  } = params;
 
-  if (target === 'selected') {
-    shapes = editor.getSelectedShapes();
-    if (shapes.length === 0) {
-      throw new Error('No shapes selected. Please select a shape first.');
-    }
-  } else if (target === 'all') {
-    shapes = editor.getCurrentPageShapes();
-    if (shapes.length === 0) {
-      throw new Error('No shapes on canvas');
-    }
-  } else {
-    // Assume it's a shape ID
-    const shape = editor.getShape(target as TLShapeId);
-    if (!shape) {
-      throw new Error(`Shape with ID "${target}" not found`);
-    }
-    shapes = [shape];
-  }
+  console.log(`[createTextShape] Creating text: "${text}" at (${x}, ${y})`);
 
-  return shapes;
+  const shapeId = createShapeId();
+  editor.createShapes([
+    {
+      id: shapeId,
+      type: 'text',
+      x: x - 100,
+      y: y - 25,
+      props: {
+        richText: toRichText(text),
+        w: 200,
+        size: mapFontSize(fontSize),
+        color: mapToTldrawColor(color),
+        autoSize: true,
+      },
+    },
+  ]);
+
+  editor.select(shapeId);
+  return shapeId;
 }
 
-/**
- * Calculate position based on keywords or numeric values
- * 
- * @param editor - tldraw editor instance
- * @param x - X coordinate or keyword (center, left, right)
- * @param y - Y coordinate or keyword (center, top, bottom)
- * @returns Numeric coordinates { x, y }
- */
-export function calculatePosition(
-  editor: Editor,
-  x: number | string | undefined,
-  y: number | string | undefined
-): { x: number; y: number } {
-  const viewport = editor.getViewportPageBounds();
-  const centerX = viewport.x + viewport.width / 2;
-  const centerY = viewport.y + viewport.height / 2;
-
-  let posX: number;
-  let posY: number;
-
-  // Handle X coordinate
-  if (typeof x === 'number') {
-    posX = x;
-  } else if (x === 'center') {
-    posX = centerX;
-  } else if (x === 'left') {
-    posX = viewport.x + 100; // 100px from left edge
-  } else if (x === 'right') {
-    posX = viewport.x + viewport.width - 100; // 100px from right edge
-  } else {
-    posX = centerX; // Default to center
-  }
-
-  // Handle Y coordinate
-  if (typeof y === 'number') {
-    posY = y;
-  } else if (y === 'center') {
-    posY = centerY;
-  } else if (y === 'top') {
-    posY = viewport.y + 100; // 100px from top edge
-  } else if (y === 'bottom') {
-    posY = viewport.y + viewport.height - 100; // 100px from bottom edge
-  } else {
-    posY = centerY; // Default to center
-  }
-
-  return { x: posX, y: posY };
-}
+// ==========================================
+// SHAPE MANIPULATION FUNCTIONS
+// ==========================================
 
 /**
- * Move shape(s) to a new position
+ * Move a shape to a new position
  * 
  * @param editor - tldraw editor instance
- * @param params - Move parameters
- * @returns Array of moved shape IDs
+ * @param shapeId - ID of shape to move
+ * @param deltaX - Horizontal movement distance
+ * @param deltaY - Vertical movement distance
  */
 export interface MoveShapeParams {
-  target?: string; // "selected", "all", or shape ID
-  x?: number | string; // X coordinate or keyword (center, left, right)
-  y?: number | string; // Y coordinate or keyword (center, top, bottom)
+  shapeId: TLShapeId;
+  deltaX: number;
+  deltaY: number;
 }
 
 export function moveShape(
   editor: Editor,
   params: MoveShapeParams
-): TLShapeId[] {
+): void {
   if (!editor) {
     throw new Error('Editor is required');
   }
 
-  const { target = 'selected', x, y } = params;
+  const { shapeId, deltaX, deltaY } = params;
 
-  // Get target shapes
-  const shapes = getTargetShapes(editor, target);
+  console.log(`[moveShape] Moving shape ${shapeId} by (${deltaX}, ${deltaY})`);
 
-  // Calculate target position
-  const position = calculatePosition(editor, x, y);
-
-  // Move each shape
-  const movedShapeIds: TLShapeId[] = [];
-  
-  shapes.forEach((shape) => {
-    // Get shape's current bounds to maintain relative position
-    const bounds = editor.getShapePageBounds(shape.id);
-    
-    if (bounds) {
-      // Calculate offset to move shape so its center aligns with target position
-      const shapeWidth = bounds.width;
-      const shapeHeight = bounds.height;
-      
-      // Update shape position
-      editor.updateShape({
-        id: shape.id,
-        type: shape.type,
-        x: position.x - shapeWidth / 2,
-        y: position.y - shapeHeight / 2,
-      });
-      
-      movedShapeIds.push(shape.id);
-    }
-  });
-
-  // Select the moved shapes
-  if (movedShapeIds.length > 0) {
-    editor.select(...movedShapeIds);
+  const shape = editor.getShape(shapeId);
+  if (!shape) {
+    throw new Error(`Shape with ID ${shapeId} not found`);
   }
 
-  return movedShapeIds;
+      editor.updateShape({
+    id: shapeId,
+        type: shape.type,
+    x: shape.x + deltaX,
+    y: shape.y + deltaY,
+  });
 }
 
 /**
- * Transform shape(s) - resize, rotate, or scale
+ * Transform a shape (resize, rotate)
  * 
  * @param editor - tldraw editor instance
- * @param params - Transform parameters
- * @returns Array of transformed shape IDs
+ * @param shapeId - ID of shape to transform
+ * @param scaleX - Horizontal scale factor (optional)
+ * @param scaleY - Vertical scale factor (optional)
+ * @param rotation - Rotation angle in degrees (optional)
  */
 export interface TransformShapeParams {
-  target?: string; // "selected" or shape ID
-  width?: number; // New width
-  height?: number; // New height
-  rotation?: number; // Rotation in degrees
-  scale?: number; // Scale multiplier
+  shapeId: TLShapeId;
+  scaleX?: number;
+  scaleY?: number;
+  rotation?: number;
 }
 
 export function transformShape(
   editor: Editor,
   params: TransformShapeParams
-): TLShapeId[] {
+): void {
   if (!editor) {
     throw new Error('Editor is required');
   }
 
-  const { target = 'selected', width, height, rotation, scale } = params;
+  const { shapeId, scaleX, scaleY, rotation } = params;
 
-  // Get target shapes (only selected or specific ID, not "all")
-  const shapes = getTargetShapes(editor, target);
+  console.log(`[transformShape] Transforming shape ${shapeId}`);
 
-  // Transform each shape
-  const transformedShapeIds: TLShapeId[] = [];
+  const shape = editor.getShape(shapeId);
+  if (!shape) {
+    throw new Error(`Shape with ID ${shapeId} not found`);
+  }
 
-  shapes.forEach((shape) => {
     const updates: any = {
-      id: shape.id,
+    id: shapeId,
       type: shape.type,
     };
 
-    // Apply width/height changes
-    if (width !== undefined || height !== undefined) {
-      // For geo shapes, use props.w and props.h
-      if (shape.type === 'geo') {
+  // Handle scaling for geo shapes
+  if (shape.type === 'geo' && (scaleX !== undefined || scaleY !== undefined)) {
+    const currentProps = shape.props as any;
         updates.props = {
-          ...shape.props,
-          w: width ?? shape.props.w,
-          h: height ?? shape.props.h,
-        };
-      }
-    }
+      ...currentProps,
+      w: scaleX !== undefined ? currentProps.w * scaleX : currentProps.w,
+      h: scaleY !== undefined ? currentProps.h * scaleY : currentProps.h,
+    };
+  }
 
-    // Apply scale (multiplies current dimensions)
-    if (scale !== undefined && scale > 0) {
-      if (shape.type === 'geo') {
-        const currentWidth = shape.props.w;
-        const currentHeight = shape.props.h;
-        updates.props = {
-          ...shape.props,
-          w: currentWidth * scale,
-          h: currentHeight * scale,
-        };
-      }
-    }
-
-    // Apply rotation (convert degrees to radians)
+  // Handle rotation
     if (rotation !== undefined) {
       const radians = (rotation * Math.PI) / 180;
       updates.rotation = radians;
     }
 
     editor.updateShape(updates);
-    transformedShapeIds.push(shape.id);
-  });
-
-  // Select the transformed shapes
-  if (transformedShapeIds.length > 0) {
-    editor.select(...transformedShapeIds);
-  }
-
-  return transformedShapeIds;
 }
 
-/**
- * =============================================================================
- * LAYOUT COMMANDS (Commands 5-6)
- * =============================================================================
- */
+// ==========================================
+// LAYOUT FUNCTIONS
+// ==========================================
 
 /**
- * Sort shapes by position (horizontal or vertical)
- * 
- * @param shapes - Array of shapes to sort
- * @param direction - "horizontal" or "vertical"
- * @returns Sorted array of shapes
- */
-export function sortShapesByPosition(
-  editor: Editor,
-  shapes: Array<any>,
-  direction: 'horizontal' | 'vertical'
-): Array<any> {
-  return [...shapes].sort((a, b) => {
-    const boundsA = editor.getShapePageBounds(a.id);
-    const boundsB = editor.getShapePageBounds(b.id);
-    
-    if (!boundsA || !boundsB) return 0;
-    
-    if (direction === 'horizontal') {
-      return boundsA.x - boundsB.x;
-    } else {
-      return boundsA.y - boundsB.y;
-    }
-  });
-}
-
-/**
- * Arrange selected shapes in a line (horizontal or vertical)
+ * Arrange shapes in a specified layout pattern
  * 
  * @param editor - tldraw editor instance
- * @param params - Arrange parameters
- * @returns Array of arranged shape IDs
+ * @param shapeIds - Array of shape IDs to arrange
+ * @param pattern - Layout pattern ('horizontal', 'vertical', 'grid')
+ * @param spacing - Space between shapes (default: 20)
  */
 export interface ArrangeShapesParams {
-  direction?: 'horizontal' | 'vertical'; // Direction to arrange (default: horizontal)
-  spacing?: number; // Gap between shapes (default: 50px)
-  alignment?: 'start' | 'center' | 'end'; // Alignment perpendicular to direction (default: center)
+  shapeIds: TLShapeId[];
+  pattern: 'horizontal' | 'vertical' | 'grid';
+  spacing?: number;
 }
 
 export function arrangeShapes(
   editor: Editor,
-  params: ArrangeShapesParams = {}
-): TLShapeId[] {
+  params: ArrangeShapesParams
+): void {
   if (!editor) {
     throw new Error('Editor is required');
   }
 
-  const { direction = 'horizontal', spacing = 50, alignment = 'center' } = params;
+  const { shapeIds, pattern, spacing = 20 } = params;
 
-  // Get selected shapes
-  const shapes = editor.getSelectedShapes();
-  
-  if (shapes.length < 2) {
-    throw new Error('Please select at least 2 shapes to arrange');
+  console.log(`[arrangeShapes] Arranging ${shapeIds.length} shapes in ${pattern} pattern`);
+
+  if (shapeIds.length === 0) {
+    throw new Error('No shape IDs provided');
   }
 
-  // Sort shapes by position
-  const sortedShapes = sortShapesByPosition(editor, shapes, direction);
+  const center = getViewportCenter(editor);
+  const shapes = shapeIds.map(id => editor.getShape(id)).filter(Boolean);
 
-  // Get the first shape's bounds as reference for alignment
-  const firstBounds = editor.getShapePageBounds(sortedShapes[0].id);
-  if (!firstBounds) {
-    throw new Error('Could not get bounds for first shape');
-  }
+  if (pattern === 'horizontal') {
+    const totalWidth = shapes.reduce((sum, shape: any) => {
+      const width = shape.type === 'geo' ? shape.props.w : 200;
+      return sum + width + spacing;
+    }, -spacing);
 
-  // Calculate reference position for alignment
-  const referenceY = firstBounds.y + firstBounds.height / 2; // Center Y of first shape
-  const referenceX = firstBounds.x + firstBounds.width / 2; // Center X of first shape
+    let currentX = center.x - totalWidth / 2;
 
-  // Calculate new positions
-  let currentPosition = 0;
-  const arrangedShapeIds: TLShapeId[] = [];
+    shapes.forEach((shape: any) => {
+      const width = shape.type === 'geo' ? shape.props.w : 200;
+      editor.updateShape({
+        id: shape.id,
+        type: shape.type,
+        x: currentX,
+        y: center.y - (shape.type === 'geo' ? shape.props.h / 2 : 25),
+      });
+      currentX += width + spacing;
+    });
+  } else if (pattern === 'vertical') {
+    const totalHeight = shapes.reduce((sum, shape: any) => {
+      const height = shape.type === 'geo' ? shape.props.h : 50;
+      return sum + height + spacing;
+    }, -spacing);
 
-  sortedShapes.forEach((shape, index) => {
-    const bounds = editor.getShapePageBounds(shape.id);
-    if (!bounds) return;
+    let currentY = center.y - totalHeight / 2;
 
-    let newX = shape.x;
-    let newY = shape.y;
-
-    if (direction === 'horizontal') {
-      // Arrange horizontally
-      if (index === 0) {
-        // Keep first shape position as anchor
-        currentPosition = bounds.x;
-      } else {
-        newX = currentPosition;
-      }
-      
-      // Apply alignment on Y axis (align all shapes vertically)
-      if (alignment === 'start') {
-        // Align tops
-        newY = firstBounds.y;
-      } else if (alignment === 'center') {
-        // Align centers
-        newY = referenceY - bounds.height / 2;
-      } else if (alignment === 'end') {
-        // Align bottoms
-        newY = firstBounds.y + firstBounds.height - bounds.height;
-      }
-
-      currentPosition += bounds.width + spacing;
-    } else {
-      // Arrange vertically
-      if (index === 0) {
-        // Keep first shape position as anchor
-        currentPosition = bounds.y;
-      } else {
-        newY = currentPosition;
-      }
-      
-      // Apply alignment on X axis (align all shapes horizontally)
-      if (alignment === 'start') {
-        // Align lefts
-        newX = firstBounds.x;
-      } else if (alignment === 'center') {
-        // Align centers
-        newX = referenceX - bounds.width / 2;
-      } else if (alignment === 'end') {
-        // Align rights
-        newX = firstBounds.x + firstBounds.width - bounds.width;
-      }
-
-      currentPosition += bounds.height + spacing;
-    }
-
-    // Update shape position
+    shapes.forEach((shape: any) => {
+      const height = shape.type === 'geo' ? shape.props.h : 50;
     editor.updateShape({
       id: shape.id,
       type: shape.type,
-      x: newX,
-      y: newY,
-    });
-
-    arrangedShapeIds.push(shape.id);
-  });
-
-  // Select all arranged shapes
-  if (arrangedShapeIds.length > 0) {
-    editor.select(...arrangedShapeIds);
-  }
-
-  return arrangedShapeIds;
-}
-
-/**
- * Calculate grid layout positions
- * 
- * @param editor - tldraw editor instance
- * @param rows - Number of rows
- * @param columns - Number of columns
- * @param shapeSize - Size of each shape { width, height }
- * @param spacing - Gap between shapes
- * @returns Array of positions [{ x, y }]
- */
-export function calculateGridLayout(
-  editor: Editor,
-  rows: number,
-  columns: number,
-  shapeSize: { width: number; height: number },
-  spacing: number
-): Array<{ x: number; y: number }> {
-  const positions: Array<{ x: number; y: number }> = [];
-
-  // Calculate total grid dimensions
-  const totalWidth = columns * shapeSize.width + (columns - 1) * spacing;
-  const totalHeight = rows * shapeSize.height + (rows - 1) * spacing;
-
-  // Get viewport center to position grid
-  const center = getViewportCenter(editor);
-  
-  // Starting position (top-left of grid, centered in viewport)
-  const startX = center.x - totalWidth / 2;
-  const startY = center.y - totalHeight / 2;
-
-  // Generate positions for each cell
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < columns; col++) {
-      positions.push({
-        x: startX + col * (shapeSize.width + spacing) + shapeSize.width / 2,
-        y: startY + row * (shapeSize.height + spacing) + shapeSize.height / 2,
+        x: center.x - (shape.type === 'geo' ? shape.props.w / 2 : 100),
+        y: currentY,
       });
-    }
-  }
+      currentY += height + spacing;
+    });
+  } else if (pattern === 'grid') {
+    const cols = Math.ceil(Math.sqrt(shapes.length));
+    const rows = Math.ceil(shapes.length / cols);
+    const cellWidth = 220;
+    const cellHeight = 170;
+    const totalWidth = cols * cellWidth;
+    const totalHeight = rows * cellHeight;
 
-  return positions;
+    shapes.forEach((shape: any, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const x = center.x - totalWidth / 2 + col * cellWidth + cellWidth / 2;
+      const y = center.y - totalHeight / 2 + row * cellHeight + cellHeight / 2;
+
+      editor.updateShape({
+        id: shape.id,
+        type: shape.type,
+        x: x - (shape.type === 'geo' ? shape.props.w / 2 : 100),
+        y: y - (shape.type === 'geo' ? shape.props.h / 2 : 25),
+      });
+    });
+  }
 }
 
 /**
  * Create a grid of shapes
  * 
  * @param editor - tldraw editor instance
- * @param params - Grid parameters
+ * @param rows - Number of rows
+ * @param cols - Number of columns
+ * @param shapeType - Type of shapes to create (default: 'rectangle')
+ * @param spacing - Space between shapes (default: 20)
+ * @param color - Shape color (default: 'black')
  * @returns Array of created shape IDs
  */
 export interface CreateGridParams {
-  shapeType?: string; // Type of shape to create (default: rectangle) - accepts: rectangle, ellipse, circle, square
-  rows?: number; // Number of rows (default: 3)
-  columns?: number; // Number of columns (default: 3)
-  spacing?: number; // Gap between shapes (default: 20px)
-  color?: string; // Color of shapes (default: blue)
-}
-
-/**
- * Normalize shape type for grid creation
- * Maps common variations to valid shape types
- */
-function normalizeGridShapeType(shapeType: string): 'rectangle' | 'ellipse' {
-  const normalized = shapeType.toLowerCase().trim();
-  
-  // Map common variations
-  if (normalized === 'circle' || normalized === 'circles') {
-    return 'ellipse'; // Circles are ellipses with equal dimensions
-  }
-  if (normalized === 'square' || normalized === 'squares') {
-    return 'rectangle'; // Squares are rectangles with equal dimensions
-  }
-  if (normalized === 'ellipse' || normalized === 'ellipses' || normalized === 'oval' || normalized === 'ovals') {
-    return 'ellipse';
-  }
-  if (normalized === 'rectangle' || normalized === 'rectangles' || normalized === 'box' || normalized === 'boxes') {
-    return 'rectangle';
-  }
-  
-  // Default to rectangle for unknown types
-  return 'rectangle';
+  rows: number;
+  cols: number;
+  shapeType?: 'rectangle' | 'circle' | 'triangle';
+  spacing?: number;
+  color?: string;
 }
 
 export function createGrid(
   editor: Editor,
-  params: CreateGridParams = {}
+  params: CreateGridParams
 ): TLShapeId[] {
   if (!editor) {
     throw new Error('Editor is required');
   }
 
   const {
+    rows,
+    cols,
     shapeType = 'rectangle',
-    rows = 3,
-    columns = 3,
     spacing = 20,
-    color = 'blue',
+    color = 'black',
   } = params;
 
-  // Validate parameters
-  if (rows < 1 || rows > 20) {
-    throw new Error('Rows must be between 1 and 20');
-  }
-  if (columns < 1 || columns > 20) {
-    throw new Error('Columns must be between 1 and 20');
-  }
+  console.log(`[createGrid] Creating ${rows}x${cols} grid of ${shapeType}s`);
 
-  // Normalize shape type (handles circle, square, etc.)
-  const normalizedShapeType = normalizeGridShapeType(shapeType);
+  const center = getViewportCenter(editor);
+  const cellWidth = 100;
+  const cellHeight = 100;
+  const totalWidth = cols * (cellWidth + spacing) - spacing;
+  const totalHeight = rows * (cellHeight + spacing) - spacing;
 
-  // Get default size for shape type
-  const shapeSize = DEFAULT_SIZES[normalizedShapeType];
+  const shapeIds: TLShapeId[] = [];
 
-  // Calculate grid positions
-  const positions = calculateGridLayout(editor, rows, columns, shapeSize, spacing);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = center.x - totalWidth / 2 + col * (cellWidth + spacing);
+      const y = center.y - totalHeight / 2 + row * (cellHeight + spacing);
 
-  // Create shapes at each position
-  const createdShapeIds: TLShapeId[] = [];
-
-  console.log(`[createGrid] Creating ${rows}x${columns} grid (${positions.length} shapes)`);
-  
-  positions.forEach((position, index) => {
-    console.log(`[createGrid] Creating shape ${index + 1}/${positions.length} at`, position);
-    const shapeId = createShape(editor, {
-      shapeType: normalizedShapeType,
-      x: position.x,
-      y: position.y,
-      width: shapeSize.width,
-      height: shapeSize.height,
-      color,
-    });
-    createdShapeIds.push(shapeId);
-    console.log(`[createGrid] Created shape ${index + 1}: ${shapeId}`);
-  });
-
-  console.log(`[createGrid] Total shapes created: ${createdShapeIds.length}`);
-
-  // Select all created shapes
-  if (createdShapeIds.length > 0) {
-    editor.select(...createdShapeIds);
+      const shapeId = createShapeId();
+      editor.createShape({
+        id: shapeId,
+        type: 'geo',
+        x,
+        y,
+        props: {
+          geo: shapeType,
+          w: cellWidth,
+          h: cellHeight,
+          color: mapToTldrawColor(color),
+          fill: 'solid',
+        },
+      });
+      shapeIds.push(shapeId);
+    }
   }
 
-  return createdShapeIds;
+  editor.select(...shapeIds);
+  return shapeIds;
 }
 
+// ==========================================
+// COMPLEX UI COMPONENT FUNCTIONS
+// ==========================================
+
 /**
- * Helper function: Position relative to center
+ * Create a login form
  * 
- * @param center - Base center point { x, y }
- * @param offsetX - X offset from center
- * @param offsetY - Y offset from center
- * @returns Absolute position { x, y }
- */
-export function positionRelativeToCenter(
-  center: { x: number; y: number },
-  offsetX: number,
-  offsetY: number
-): { x: number; y: number } {
-  return {
-    x: center.x + offsetX,
-    y: center.y + offsetY,
-  };
-}
-
-/**
- * Helper function: Create multiple shapes in a single transaction
+ * Creates 8 shapes:
+ * 1. Form container (400x300, light-blue)
+ * 2. Title text ("Login", 24px, centered)
+ * 3. Username label ("Username", 16px)
+ * 4. Username input field (300x40, white)
+ * 5. Password label ("Password", 16px)
+ * 6. Password input field (300x40, white)
+ * 7. Login button (200x40, blue)
+ * 8. Button text ("Login", 16px, white)
  * 
  * @param editor - tldraw editor instance
- * @param shapeDefinitions - Array of shape definitions
+ * @param params - Login form parameters
  * @returns Array of created shape IDs
  */
-export interface ShapeDefinition {
-  shapeType: 'rectangle' | 'ellipse' | 'text';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color?: string;
-  text?: string;
-  fontSize?: number;
+export interface CreateLoginFormParams {
+  title?: string;        // Form title (default: "Login")
+  color?: string;       // Form background color (default: "light-blue")
 }
 
-export function createMultiShapeLayout(
+export function createLoginForm(
   editor: Editor,
-  shapeDefinitions: ShapeDefinition[]
+  params: CreateLoginFormParams = {}
 ): TLShapeId[] {
   if (!editor) {
     throw new Error('Editor is required');
   }
 
-  const createdShapeIds: TLShapeId[] = [];
+  const {
+    title = 'Login',
+    color = 'light-blue',
+  } = params;
 
-  // Create each shape
-  shapeDefinitions.forEach((shapeDef) => {
-    if (shapeDef.shapeType === 'text') {
-      const shapeId = createTextShape(editor, {
-        text: shapeDef.text || '',
-        x: shapeDef.x,
-        y: shapeDef.y,
-        fontSize: shapeDef.fontSize,
-        color: shapeDef.color,
-      });
-      createdShapeIds.push(shapeId);
-    } else {
-      const shapeId = createShape(editor, {
-        shapeType: shapeDef.shapeType,
-        x: shapeDef.x,
-        y: shapeDef.y,
-        width: shapeDef.width,
-        height: shapeDef.height,
-        color: shapeDef.color,
-      });
-      createdShapeIds.push(shapeId);
-    }
-  });
-
-  return createdShapeIds;
-}
-
-/**
- * Create a login form interface
- * 
- * Creates 8 shapes:
- * 1. Background rectangle (320x380, light-blue)
- * 2. Title text ("Login", size: 32, black, centered)
- * 3. Username label text ("Username:", size: 16, black, left-aligned)
- * 4. Username input field (260x40, grey fill)
- * 5. Password label text ("Password:", size: 16, black, left-aligned)
- * 6. Password input field (260x40, grey fill)
- * 7. Submit button (180x45, blue)
- * 8. Submit button text ("Submit", size: 18, black for contrast)
- * 
- * @param editor - tldraw editor instance
- * @returns Array of created shape IDs
- */
-export function createLoginForm(editor: Editor): TLShapeId[] {
-  if (!editor) {
-    throw new Error('Editor is required');
-  }
-
-  console.log('[createLoginForm] Creating login form with 8 shapes (with labels)');
+  console.log('[createLoginForm] Creating login form with 8 shapes');
 
   const center = getViewportCenter(editor);
   
-  // Define the 8 shapes for a proper login form
+  // Define the 8 shapes for the login form
   const shapes: ShapeDefinition[] = [
-    // 1. Background rectangle (320x380, light-blue)
+    // 1. Form container (400x300, customizable color)
     {
       shapeType: 'rectangle',
       x: center.x,
       y: center.y,
-      width: 320,
-      height: 380,
-      color: 'light-blue',
+      width: 400,
+      height: 300,
+      color: mapToTldrawColor(color),
     },
-    // 2. Title text ("Login", size: 32, bold)
+    // 2. Title text ("Login", 24px, centered at top)
     {
       shapeType: 'text',
       x: center.x,
-      y: center.y - 145,
+      y: center.y - 110,
+      width: 300,
+      height: 35,
+      text: title,
+      fontSize: 24,
+      color: 'black',
+    },
+    // 3. Username label ("Username", 16px)
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y - 60,
+      width: 300,
+      height: 25,
+      text: 'Username',
+      fontSize: 16,
+      color: 'black',
+    },
+    // 4. Username input field (300x40, white)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y - 30,
+      width: 300,
+      height: 40,
+      color: 'grey',
+    },
+    // 5. Password label ("Password", 16px)
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y + 20,
+      width: 300,
+      height: 25,
+      text: 'Password',
+      fontSize: 16,
+      color: 'black',
+    },
+    // 6. Password input field (300x40, white)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y + 50,
+      width: 300,
+      height: 40,
+      color: 'grey',
+    },
+    // 7. Login button (200x40, blue)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y + 105,
       width: 200,
-      height: 50,
-      text: 'Login',
-      fontSize: 32,
-      color: 'black',
-    },
-    // 3. Username label text (positioned above input field, left-aligned)
-    {
-      shapeType: 'text',
-      x: center.x - 55,
-      y: center.y - 90,
-      width: 150,
-      height: 25,
-      text: 'Username:',
-      fontSize: 16,
-      color: 'black',
-    },
-    // 4. Username input field (light grey background for better visibility)
-    {
-      shapeType: 'rectangle',
-      x: center.x,
-      y: center.y - 53,
-      width: 260,
       height: 40,
-      color: 'grey',
-    },
-    // 5. Password label text (positioned above input field, left-aligned)
-    {
-      shapeType: 'text',
-      x: center.x - 55,
-      y: center.y + 0,
-      width: 150,
-      height: 25,
-      text: 'Password:',
-      fontSize: 16,
-      color: 'black',
-    },
-    // 6. Password input field (light grey background for better visibility)
-    {
-      shapeType: 'rectangle',
-      x: center.x,
-      y: center.y + 40,
-      width: 260,
-      height: 40,
-      color: 'grey',
-    },
-    // 7. Submit button (blue with rounded corners)
-    {
-      shapeType: 'rectangle',
-      x: center.x,
-      y: center.y + 110,
-      width: 180,
-      height: 45,
       color: 'blue',
     },
-    // 8. Submit button text (black for better contrast)
+    // 8. Button text ("Login", 16px, white)
     {
       shapeType: 'text',
       x: center.x,
-      y: center.y + 110,
-      width: 120,
-      height: 30,
-      text: 'Submit',
-      fontSize: 18,
-      color: 'black',
+      y: center.y + 105,
+      width: 180,
+      height: 28,
+      text: 'Login',
+      fontSize: 16,
+      color: 'white',
     },
   ];
 
@@ -1002,25 +722,25 @@ export function createLoginForm(editor: Editor): TLShapeId[] {
 }
 
 /**
- * Create a card layout
+ * Create a card component
  * 
  * Creates 7 shapes:
  * 1. Card background (300x280, customizable color)
- * 2. Image/icon placeholder area (280x100, grey)
- * 3. Title text (size: 24, black)
- * 4. Subtitle/description text (size: 16, grey)
- * 5. Body content text area (size: 14, black)
+ * 2. Image/icon placeholder (280x100, grey)
+ * 3. Title text (size: 24, black, bold)
+ * 4. Subtitle text (size: 16, grey)
+ * 5. Body content text (size: 14, black)
  * 6. Action button (160x40, blue)
- * 7. Action button text (size: 16, white)
+ * 7. Action button text ("View More", size: 16, white)
  * 
  * @param editor - tldraw editor instance
  * @param params - Card parameters
  * @returns Array of created shape IDs
  */
 export interface CreateCardParams {
-  title?: string; // Card title (default: "Card Title")
-  subtitle?: string; // Card subtitle (default: "Card subtitle")
-  color?: string; // Card background color (default: "light-blue")
+  title?: string;       // Card title (default: "Card Title")
+  subtitle?: string;    // Card subtitle (default: "Card subtitle")
+  color?: string;       // Card background color (default: "light-blue")
 }
 
 export function createCard(
@@ -1083,7 +803,7 @@ export function createCard(
       fontSize: 16,
       color: 'grey',
     },
-    // 5. Body content text (size: 14, black) 
+    // 5. Body content text (size: 14, black)
     {
       shapeType: 'text',
       x: center.x,
@@ -1229,3 +949,124 @@ export function createNavigationBar(
   return createdShapeIds;
 }
 
+/**
+ * Create a checkbox list with variable item count
+ * 
+ * Creates 2 + (count * 2) shapes:
+ * 1. Container background (300x[dynamic], customizable color)
+ * 2. Title text ("Checklist", 20px, bold)
+ * 3-N. Checkbox squares (20x20, grey) - one per item
+ * 3-N. Checkbox label texts (beside each box) - one per item
+ * 
+ * Example: 3 items = 8 shapes total (1 container + 1 title + 3 boxes + 3 labels)
+ * Example: 7 items = 16 shapes total (1 container + 1 title + 7 boxes + 7 labels)
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Checkbox list parameters
+ * @returns Array of created shape IDs
+ */
+export interface CreateCheckboxListParams {
+  title?: string;           // Title text (default: "Checklist")
+  items?: string[];         // Array of checkbox labels (default: ['Task 1', 'Task 2', 'Task 3'])
+  color?: string;           // Container background color (default: 'light-blue')
+  checkboxSize?: number;    // Size of checkbox squares (default: 20)
+  spacing?: number;         // Vertical spacing between items (default: 12)
+}
+
+export function createCheckboxList(
+  editor: Editor,
+  params: CreateCheckboxListParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    title = 'Checklist',
+    items = ['Task 1', 'Task 2', 'Task 3'],
+    color = 'light-blue',
+    checkboxSize = 20,
+    spacing = 12,
+  } = params;
+
+  console.log(`[createCheckboxList] Creating checkbox list with ${items.length} items`);
+
+  const center = getViewportCenter(editor);
+  
+  // Calculate dynamic dimensions based on item count
+  const containerWidth = 300;
+  const containerPadding = 20;
+  const checkboxLabelGap = 10;
+  const titleHeight = 30;
+  const titleBottomMargin = 10;
+  const itemHeight = checkboxSize + spacing;
+  const totalItemsHeight = items.length * itemHeight;
+  const containerHeight = containerPadding * 2 + titleHeight + titleBottomMargin + totalItemsHeight;
+
+  const shapes: ShapeDefinition[] = [];
+
+  // 1. Container background
+  shapes.push({
+    shapeType: 'rectangle',
+    x: center.x,
+    y: center.y,
+    width: containerWidth,
+    height: containerHeight,
+    color: mapToTldrawColor(color),
+  });
+  
+  // 2. Title text
+  shapes.push({
+    shapeType: 'text',
+    x: center.x,
+    y: center.y - containerHeight / 2 + containerPadding + titleHeight / 2,
+    width: containerWidth - containerPadding * 2,
+    height: titleHeight,
+    text: title,
+    fontSize: 20,
+    color: 'black',
+  });
+
+  // 3-N. Checkboxes and labels (dynamically generated based on items.length)
+  const firstItemY = center.y - containerHeight / 2 + containerPadding + titleHeight + titleBottomMargin;
+  
+  items.forEach((item, index) => {
+    const itemY = firstItemY + (index * itemHeight);
+    const checkboxX = center.x - containerWidth / 2 + containerPadding;
+    const labelX = checkboxX + checkboxSize + checkboxLabelGap;
+    
+    // Checkbox square
+    shapes.push({
+      shapeType: 'rectangle',
+      x: checkboxX + checkboxSize / 2,
+      y: itemY + checkboxSize / 2,
+      width: checkboxSize,
+      height: checkboxSize,
+      color: 'grey',
+    });
+
+    // Checkbox label text
+    shapes.push({
+      shapeType: 'text',
+      x: labelX + (containerWidth - containerPadding * 2 - checkboxSize - checkboxLabelGap) / 2,
+      y: itemY + checkboxSize / 2,
+      width: containerWidth - containerPadding * 2 - checkboxSize - checkboxLabelGap,
+      height: checkboxSize,
+      text: item,
+      fontSize: 16,
+      color: 'black',
+    });
+  });
+
+  // Create all shapes
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+
+  console.log(`[createCheckboxList] Created ${createdShapeIds.length} shapes (1 container + 1 title + ${items.length * 2} checkboxes/labels)`);
+
+  // Select all created shapes
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  return createdShapeIds;
+}

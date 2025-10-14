@@ -14,7 +14,7 @@ import type { Message } from '@/types/ai';
 import { ChatMessage } from './ChatMessage';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { executeAICommand, parseAIError } from '@/lib/aiService';
-import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid, createLoginForm, createCard, createNavigationBar } from '@/lib/canvasTools';
+import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid, createLoginForm, createCard, createNavigationBar, createCheckboxList } from '@/lib/canvasTools';
 
 interface FloatingChatProps {
   editor: Editor | null;
@@ -181,7 +181,7 @@ export function FloatingChat({ editor }: FloatingChatProps) {
           switch (name) {
             case 'createShape':
               createShape(editor, {
-                shapeType: (args as any).shapeType as 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'arrow',
+                type: (args as any).shapeType as 'rectangle' | 'circle' | 'triangle' | 'hexagon' | 'diamond' | 'text',
                 x: (args as any).x as number | undefined,
                 y: (args as any).y as number | undefined,
                 width: (args as any).width as number | undefined,
@@ -204,37 +204,60 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               
             case 'moveShape':
               {
-                const movedIds = moveShape(editor, {
-                  target: (args as any).target as string | undefined,
-                  x: (args as any).x as number | string | undefined,
-                  y: (args as any).y as number | string | undefined,
+                // Get selected shapes
+                const selectedShapes = editor.getSelectedShapes();
+                if (selectedShapes.length === 0) {
+                  addMessage('system', '❌ No shapes selected. Please select at least one shape first.');
+                  break;
+                }
+                
+                // Move each selected shape
+                const deltaX = (args as any).deltaX as number || 0;
+                const deltaY = (args as any).deltaY as number || 0;
+                
+                selectedShapes.forEach(shape => {
+                  moveShape(editor, {
+                    shapeId: shape.id,
+                    deltaX,
+                    deltaY,
+                  });
                 });
-                const count = movedIds.length;
-                const targetDesc = (args as any).target || 'selected';
-                const posDesc = `${(args as any).x || 'center'}, ${(args as any).y || 'center'}`;
-                addMessage('system', `✅ Moved ${count} shape${count > 1 ? 's' : ''} (${targetDesc}) to ${posDesc}`);
+                
+                const count = selectedShapes.length;
+                addMessage('system', `✅ Moved ${count} shape${count > 1 ? 's' : ''} by (${deltaX}, ${deltaY})`);
               }
               break;
               
             case 'transformShape':
               {
-                const transformedIds = transformShape(editor, {
-                  target: (args as any).target as string | undefined,
-                  width: (args as any).width as number | undefined,
-                  height: (args as any).height as number | undefined,
-                  rotation: (args as any).rotation as number | undefined,
-                  scale: (args as any).scale as number | undefined,
+                // Get selected shapes
+                const selectedShapes = editor.getSelectedShapes();
+                if (selectedShapes.length === 0) {
+                  addMessage('system', '❌ No shapes selected. Please select at least one shape first.');
+                  break;
+                }
+                
+                // Transform each selected shape
+                const scaleX = (args as any).scaleX as number | undefined;
+                const scaleY = (args as any).scaleY as number | undefined;
+                const rotation = (args as any).rotation as number | undefined;
+                
+                selectedShapes.forEach(shape => {
+                  transformShape(editor, {
+                    shapeId: shape.id,
+                    scaleX,
+                    scaleY,
+                    rotation,
+                  });
                 });
-                const count = transformedIds.length;
+                
+                const count = selectedShapes.length;
                 const changes = [];
-                if ((args as any).width || (args as any).height) {
-                  changes.push(`size: ${(args as any).width || '?'}x${(args as any).height || '?'}`);
+                if (scaleX || scaleY) {
+                  changes.push(`scale: ${scaleX || 1}x${scaleY || 1}`);
                 }
-                if ((args as any).rotation) {
-                  changes.push(`rotation: ${(args as any).rotation}°`);
-                }
-                if ((args as any).scale) {
-                  changes.push(`scale: ${(args as any).scale}x`);
+                if (rotation) {
+                  changes.push(`rotation: ${rotation}°`);
                 }
                 addMessage('system', `✅ Transformed ${count} shape${count > 1 ? 's' : ''}: ${changes.join(', ')}`);
               }
@@ -242,31 +265,43 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               
             case 'arrangeShapes':
               {
-                const arrangedIds = arrangeShapes(editor, {
-                  direction: (args as any).direction as 'horizontal' | 'vertical' | undefined,
-                  spacing: (args as any).spacing as number | undefined,
-                  alignment: (args as any).alignment as 'start' | 'center' | 'end' | undefined,
+                // Get selected shapes
+                const selectedShapes = editor.getSelectedShapes();
+                if (selectedShapes.length < 2) {
+                  addMessage('system', '❌ Please select at least 2 shapes to arrange.');
+                  break;
+                }
+                
+                const pattern = ((args as any).direction || 'horizontal') as 'horizontal' | 'vertical' | 'grid';
+                const spacing = (args as any).spacing as number | undefined;
+                
+                arrangeShapes(editor, {
+                  shapeIds: selectedShapes.map(s => s.id),
+                  pattern,
+                  spacing,
                 });
-                const count = arrangedIds.length;
-                const direction = (args as any).direction || 'horizontal';
-                const spacing = (args as any).spacing || 50;
-                addMessage('system', `✅ Arranged ${count} shape${count > 1 ? 's' : ''} ${direction}ly with ${spacing}px spacing`);
+                
+                const count = selectedShapes.length;
+                addMessage('system', `✅ Arranged ${count} shapes in ${pattern} pattern with ${spacing || 20}px spacing`);
               }
               break;
               
             case 'createGrid':
               {
-                const gridIds = createGrid(editor, {
-                  shapeType: (args as any).shapeType as 'rectangle' | 'ellipse' | undefined,
-                  rows: (args as any).rows as number | undefined,
-                  columns: (args as any).columns as number | undefined,
-                  spacing: (args as any).spacing as number | undefined,
-                  color: (args as any).color as string | undefined,
-                });
                 const rows = (args as any).rows || 3;
-                const columns = (args as any).columns || 3;
+                const cols = (args as any).columns || 3;
                 const shapeType = (args as any).shapeType || 'rectangle';
-                addMessage('system', `✅ Created ${rows}×${columns} grid of ${shapeType}s (${gridIds.length} shapes)`);
+                const spacing = (args as any).spacing as number | undefined;
+                const color = (args as any).color as string | undefined;
+                
+                const gridIds = createGrid(editor, {
+                  rows,
+                  cols,
+                  shapeType: shapeType as 'rectangle' | 'circle' | 'triangle',
+                  spacing,
+                  color,
+                });
+                addMessage('system', `✅ Created ${rows}×${cols} grid of ${shapeType}s (${gridIds.length} shapes)`);
               }
               break;
               
@@ -298,6 +333,19 @@ export function FloatingChat({ editor }: FloatingChatProps) {
                 });
                 const menuItems = (args as any).menuItems || ['Home', 'About', 'Services', 'Contact'];
                 addMessage('system', `✅ Created navigation bar with ${menuItems.length} menu items (${navBarIds.length} components)`);
+              }
+              break;
+              
+            case 'createCheckboxList':
+              {
+                const checkboxIds = createCheckboxList(editor, {
+                  title: (args as any).title as string | undefined,
+                  items: (args as any).items as string[] | undefined,
+                  color: (args as any).color as string | undefined,
+                });
+                const items = (args as any).items || ['Task 1', 'Task 2', 'Task 3'];
+                const title = (args as any).title || 'Checklist';
+                addMessage('system', `✅ Created "${title}" with ${items.length} checkboxes (${checkboxIds.length} components)`);
               }
               break;
               

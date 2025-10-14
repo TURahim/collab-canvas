@@ -14,6 +14,7 @@ import {
   createLoginForm,
   createCard,
   createNavigationBar,
+  createCheckboxList,
   createMultiShapeLayout,
   positionRelativeToCenter,
 } from '../canvasTools';
@@ -29,8 +30,8 @@ describe('canvasTools', () => {
 
   beforeEach(() => {
     mockEditor = {
-      createShape: jest.fn(),
-      createShapes: jest.fn(), // For text shapes (plural API)
+      createShape: jest.fn().mockReturnValue('shape-id-123' as TLShapeId),
+      createShapes: jest.fn().mockReturnValue(['shape-id-text-123' as TLShapeId]), // For text shapes (plural API)
       select: jest.fn(),
       getViewportPageBounds: jest.fn().mockReturnValue({
         x: 0,
@@ -1167,6 +1168,145 @@ describe('canvasTools', () => {
       expect(() => {
         createNavigationBar(null as any);
       }).toThrow('Editor is required');
+    });
+  });
+
+  describe('createCheckboxList', () => {
+    it('should create correct number of shapes for default 3 checkboxes', () => {
+      const result = createCheckboxList(mockEditor);
+
+      // 1 container + 3 checkboxes = 4 geo shapes via createShape
+      // 1 title + 3 labels = 4 text shapes via createShapes
+      // Total: 8 shapes
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(4);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(4);
+      expect(result).toHaveLength(8);
+    });
+
+    it('should use default values when no parameters provided', () => {
+      createCheckboxList(mockEditor);
+
+      const geoCall = (mockEditor.createShape as jest.Mock).mock.calls[0][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+
+      // Check container
+      expect(geoCall.type).toBe('geo');
+      expect(geoCall.props.color).toBe('light-blue');
+
+      // Check title
+      const titleCall = textCalls[0][0][0];
+      expect(titleCall.props.richText.text).toBe('Checklist');
+    });
+
+    it('should use custom title and color', () => {
+      createCheckboxList(mockEditor, {
+        title: 'My Todo List',
+        color: 'light-green',
+      });
+
+      const geoCall = (mockEditor.createShape as jest.Mock).mock.calls[0][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+
+      expect(geoCall.props.color).toBe('light-green');
+      
+      const titleCall = textCalls[0][0][0];
+      expect(titleCall.props.richText.text).toBe('My Todo List');
+    });
+
+    it('should create correct number of shapes for 5 checkboxes', () => {
+      const items = ['Task 1', 'Task 2', 'Task 3', 'Task 4', 'Task 5'];
+      const result = createCheckboxList(mockEditor, { items });
+
+      // 1 container + 5 checkboxes = 6 geo shapes via createShape
+      // 1 title + 5 labels = 6 text shapes via createShapes
+      // Total: 12 shapes
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(6);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(6);
+      expect(result).toHaveLength(12);
+    });
+
+    it('should create correct number of shapes for 7 checkboxes', () => {
+      const items = ['Task 1', 'Task 2', 'Task 3', 'Task 4', 'Task 5', 'Task 6', 'Task 7'];
+      const result = createCheckboxList(mockEditor, { items });
+
+      // 1 container + 7 checkboxes = 8 geo shapes via createShape
+      // 1 title + 7 labels = 8 text shapes via createShapes
+      // Total: 16 shapes
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(8);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(8);
+      expect(result).toHaveLength(16);
+    });
+
+    it('should create correct number of shapes for 10 checkboxes', () => {
+      const items = Array.from({ length: 10 }, (_, i) => `Task ${i + 1}`);
+      const result = createCheckboxList(mockEditor, { items });
+
+      // 1 container + 10 checkboxes = 11 geo shapes via createShape
+      // 1 title + 10 labels = 11 text shapes via createShapes
+      // Total: 22 shapes
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(11);
+      expect(mockEditor.createShapes).toHaveBeenCalledTimes(11);
+      expect(result).toHaveLength(22);
+    });
+
+    it('should create checkboxes with correct size', () => {
+      createCheckboxList(mockEditor, { checkboxSize: 25 });
+
+      const geoCalls = (mockEditor.createShape as jest.Mock).mock.calls;
+      
+      // Skip container (first call), check first checkbox (would be in createShapes)
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      
+      // Check that title was created
+      expect(textCalls[0][0][0].type).toBe('text');
+    });
+
+    it('should create checkboxes with custom labels', () => {
+      const customItems = ['Buy milk', 'Walk dog', 'Finish project'];
+      createCheckboxList(mockEditor, { items: customItems });
+
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      
+      // Title is first, then alternating checkboxes and labels
+      // Labels are at indices 2, 4, 6 (after title at 0, and checkboxes at 1, 3, 5)
+      expect(textCalls.length).toBeGreaterThan(2);
+    });
+
+    it('should calculate dynamic container height based on item count', () => {
+      const threeItems = createCheckboxList(mockEditor, { items: ['A', 'B', 'C'] });
+      const sevenItems = createCheckboxList(mockEditor, { items: ['A', 'B', 'C', 'D', 'E', 'F', 'G'] });
+
+      // Both should create shapes, but different counts
+      expect(threeItems.length).toBe(8);  // 1 + 1 + 3 + 3
+      expect(sevenItems.length).toBe(16); // 1 + 1 + 7 + 7
+    });
+
+    it('should select all created shapes', () => {
+      const result = createCheckboxList(mockEditor);
+
+      expect(mockEditor.select).toHaveBeenCalledWith(...result);
+    });
+
+    it('should throw error when editor is null', () => {
+      expect(() => {
+        createCheckboxList(null as any);
+      }).toThrow('Editor is required');
+    });
+
+    it('should handle single checkbox item', () => {
+      const result = createCheckboxList(mockEditor, { items: ['Single Task'] });
+
+      // 1 container + 1 title + 1 checkbox + 1 label = 4 shapes total
+      expect(result).toHaveLength(4);
+    });
+
+    it('should create grey checkboxes and black text', () => {
+      createCheckboxList(mockEditor);
+
+      const geoCall = (mockEditor.createShape as jest.Mock).mock.calls[0][0];
+      
+      // Container should be light-blue (default)
+      expect(geoCall.props.color).toBe('light-blue');
     });
   });
 });

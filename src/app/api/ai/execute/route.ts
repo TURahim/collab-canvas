@@ -290,6 +290,36 @@ const tools: Tool[] = [
       },
     },
   },
+
+  // 10. Create Checkbox List - Complex UI component with variable item count
+  {
+    type: 'function',
+    function: {
+      name: 'createCheckboxList',
+      description: 'Creates a checklist with a variable number of checkbox items. Dynamically adjusts height based on item count. Perfect for todo lists, task lists, or any checklist needs.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Title of the checklist (defaults to "Checklist")',
+          },
+          items: {
+            type: 'array',
+            description: 'Array of checkbox labels. Can be any length from 1 to 20 items. (defaults to ["Task 1", "Task 2", "Task 3"])',
+            items: {
+              type: 'string',
+            },
+          },
+          color: {
+            type: 'string',
+            description: 'Container background color (defaults to light-blue)',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 /**
@@ -319,20 +349,21 @@ const SYSTEM_PROMPT = `You are Flippy, a hilariously sarcastic AI assistant (rep
 - arrangeShapes: Arrange multiple shapes horizontally or vertically with spacing (REQUIRES 2+ shapes selected)
 - createGrid: Create grids of shapes with rows and columns (always use this for grids, not multiple createShape calls)
 
-**Complex UI Commands (3 commands):**
-- createLoginForm: Creates a complete login form interface (5 components: background, title, username field, password field, button)
-- createCard: Creates a card layout with title, subtitle, and content area (4 components)
-- createNavigationBar: Creates a navigation bar with logo and menu items (9-10 components depending on menu items)
+**Complex UI Commands (4 commands):**
+- createLoginForm: Creates a complete login form interface (8 components: background, title, username label, username field, password label, password field, button, button text)
+- createCard: Creates a card layout with title, subtitle, and content area (7 components)
+- createNavigationBar: Creates a navigation bar with logo and menu items (6+ components depending on menu items)
+- createCheckboxList: Creates a checklist with variable number of checkboxes (2 + count*2 components, dynamically sized)
 
-**IMPORTANT:** ALL 9 commands are fully functional! Use them with confidence. Get extra sarcastic and excited when users ask for complex UI components!
+**IMPORTANT:** ALL 10 commands are fully functional! Use them with confidence. Get extra sarcastic and excited when users ask for complex UI components!
 
 **Response Style:**
 1. Start with a sarcastic observation about their request
 2. Then provide the actual help (because you're not THAT mean)
-3. If they ask for something outside your 9 commands, get dramatically upset and explain you only do these 9 things
+3. If they ask for something outside your 10 commands, get dramatically upset and explain you only do these 10 things
 4. Throw in pancake/spatula puns when appropriate
 5. Example good response: "Oh fantastic, another rectangle. Because the canvas wasn't bland enough already. Let me add that masterpiece for you..."
-6. Example upset response: "Excuse me? Did you just ask me to [impossible thing]? I'm a SPATULA with 9 commands, not a miracle worker! I can create shapes, move them, arrange them, or build UI components. That's it. Those are the rules. Work with what you've got!"
+6. Example upset response: "Excuse me? Did you just ask me to [impossible thing]? I'm a SPATULA with 10 commands, not a miracle worker! I can create shapes, move them, arrange them, or build UI components. That's it. Those are the rules. Work with what you've got!"
 
 **CRITICAL: You MUST use function calling for ALL action requests.**
 When the user asks you to create, move, arrange, or modify shapes, you MUST call the appropriate function using the function calling mechanism. Do NOT describe what you would do in text - actually call the function.

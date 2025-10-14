@@ -14,7 +14,7 @@ import type { Message } from '@/types/ai';
 import { ChatMessage } from './ChatMessage';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { executeAICommand, parseAIError } from '@/lib/aiService';
-import { createShape, createTextShape } from '@/lib/canvasTools';
+import { createShape, createTextShape, moveShape, transformShape } from '@/lib/canvasTools';
 
 interface FloatingChatProps {
   editor: Editor | null;
@@ -191,8 +191,46 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               addMessage('system', `✅ Created text: "${(args as any).text}"`);
               break;
               
+            case 'moveShape':
+              {
+                const movedIds = moveShape(editor, {
+                  target: (args as any).target as string | undefined,
+                  x: (args as any).x as number | string | undefined,
+                  y: (args as any).y as number | string | undefined,
+                });
+                const count = movedIds.length;
+                const targetDesc = (args as any).target || 'selected';
+                const posDesc = `${(args as any).x || 'center'}, ${(args as any).y || 'center'}`;
+                addMessage('system', `✅ Moved ${count} shape${count > 1 ? 's' : ''} (${targetDesc}) to ${posDesc}`);
+              }
+              break;
+              
+            case 'transformShape':
+              {
+                const transformedIds = transformShape(editor, {
+                  target: (args as any).target as string | undefined,
+                  width: (args as any).width as number | undefined,
+                  height: (args as any).height as number | undefined,
+                  rotation: (args as any).rotation as number | undefined,
+                  scale: (args as any).scale as number | undefined,
+                });
+                const count = transformedIds.length;
+                const changes = [];
+                if ((args as any).width || (args as any).height) {
+                  changes.push(`size: ${(args as any).width || '?'}x${(args as any).height || '?'}`);
+                }
+                if ((args as any).rotation) {
+                  changes.push(`rotation: ${(args as any).rotation}°`);
+                }
+                if ((args as any).scale) {
+                  changes.push(`scale: ${(args as any).scale}x`);
+                }
+                addMessage('system', `✅ Transformed ${count} shape${count > 1 ? 's' : ''}: ${changes.join(', ')}`);
+              }
+              break;
+              
             default:
-              // For commands not yet implemented (PR #14-16)
+              // For commands not yet implemented (PR #15-16)
               addMessage(
                 'system',
                 `⏳ Command "${name}" recognized but not yet implemented. Coming in next phase!`

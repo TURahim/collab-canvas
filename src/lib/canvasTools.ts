@@ -258,3 +258,238 @@ export function createTextShape(
   return shapeId;
 }
 
+/**
+ * =============================================================================
+ * MANIPULATION COMMANDS (Commands 3-4)
+ * =============================================================================
+ */
+
+/**
+ * Get target shapes based on target parameter
+ * 
+ * @param editor - tldraw editor instance
+ * @param target - "selected", "all", or shape ID
+ * @returns Array of shapes
+ */
+export function getTargetShapes(
+  editor: Editor,
+  target: string
+): Array<any> {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  let shapes: Array<any> = [];
+
+  if (target === 'selected') {
+    shapes = editor.getSelectedShapes();
+    if (shapes.length === 0) {
+      throw new Error('No shapes selected. Please select a shape first.');
+    }
+  } else if (target === 'all') {
+    shapes = editor.getCurrentPageShapes();
+    if (shapes.length === 0) {
+      throw new Error('No shapes on canvas');
+    }
+  } else {
+    // Assume it's a shape ID
+    const shape = editor.getShape(target as TLShapeId);
+    if (!shape) {
+      throw new Error(`Shape with ID "${target}" not found`);
+    }
+    shapes = [shape];
+  }
+
+  return shapes;
+}
+
+/**
+ * Calculate position based on keywords or numeric values
+ * 
+ * @param editor - tldraw editor instance
+ * @param x - X coordinate or keyword (center, left, right)
+ * @param y - Y coordinate or keyword (center, top, bottom)
+ * @returns Numeric coordinates { x, y }
+ */
+export function calculatePosition(
+  editor: Editor,
+  x: number | string | undefined,
+  y: number | string | undefined
+): { x: number; y: number } {
+  const viewport = editor.getViewportPageBounds();
+  const centerX = viewport.x + viewport.width / 2;
+  const centerY = viewport.y + viewport.height / 2;
+
+  let posX: number;
+  let posY: number;
+
+  // Handle X coordinate
+  if (typeof x === 'number') {
+    posX = x;
+  } else if (x === 'center') {
+    posX = centerX;
+  } else if (x === 'left') {
+    posX = viewport.x + 100; // 100px from left edge
+  } else if (x === 'right') {
+    posX = viewport.x + viewport.width - 100; // 100px from right edge
+  } else {
+    posX = centerX; // Default to center
+  }
+
+  // Handle Y coordinate
+  if (typeof y === 'number') {
+    posY = y;
+  } else if (y === 'center') {
+    posY = centerY;
+  } else if (y === 'top') {
+    posY = viewport.y + 100; // 100px from top edge
+  } else if (y === 'bottom') {
+    posY = viewport.y + viewport.height - 100; // 100px from bottom edge
+  } else {
+    posY = centerY; // Default to center
+  }
+
+  return { x: posX, y: posY };
+}
+
+/**
+ * Move shape(s) to a new position
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Move parameters
+ * @returns Array of moved shape IDs
+ */
+export interface MoveShapeParams {
+  target?: string; // "selected", "all", or shape ID
+  x?: number | string; // X coordinate or keyword (center, left, right)
+  y?: number | string; // Y coordinate or keyword (center, top, bottom)
+}
+
+export function moveShape(
+  editor: Editor,
+  params: MoveShapeParams
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { target = 'selected', x, y } = params;
+
+  // Get target shapes
+  const shapes = getTargetShapes(editor, target);
+
+  // Calculate target position
+  const position = calculatePosition(editor, x, y);
+
+  // Move each shape
+  const movedShapeIds: TLShapeId[] = [];
+  
+  shapes.forEach((shape) => {
+    // Get shape's current bounds to maintain relative position
+    const bounds = editor.getShapePageBounds(shape.id);
+    
+    if (bounds) {
+      // Calculate offset to move shape so its center aligns with target position
+      const shapeWidth = bounds.width;
+      const shapeHeight = bounds.height;
+      
+      // Update shape position
+      editor.updateShape({
+        id: shape.id,
+        type: shape.type,
+        x: position.x - shapeWidth / 2,
+        y: position.y - shapeHeight / 2,
+      });
+      
+      movedShapeIds.push(shape.id);
+    }
+  });
+
+  // Select the moved shapes
+  if (movedShapeIds.length > 0) {
+    editor.select(...movedShapeIds);
+  }
+
+  return movedShapeIds;
+}
+
+/**
+ * Transform shape(s) - resize, rotate, or scale
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Transform parameters
+ * @returns Array of transformed shape IDs
+ */
+export interface TransformShapeParams {
+  target?: string; // "selected" or shape ID
+  width?: number; // New width
+  height?: number; // New height
+  rotation?: number; // Rotation in degrees
+  scale?: number; // Scale multiplier
+}
+
+export function transformShape(
+  editor: Editor,
+  params: TransformShapeParams
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { target = 'selected', width, height, rotation, scale } = params;
+
+  // Get target shapes (only selected or specific ID, not "all")
+  const shapes = getTargetShapes(editor, target);
+
+  // Transform each shape
+  const transformedShapeIds: TLShapeId[] = [];
+
+  shapes.forEach((shape) => {
+    const updates: any = {
+      id: shape.id,
+      type: shape.type,
+    };
+
+    // Apply width/height changes
+    if (width !== undefined || height !== undefined) {
+      // For geo shapes, use props.w and props.h
+      if (shape.type === 'geo') {
+        updates.props = {
+          ...shape.props,
+          w: width ?? shape.props.w,
+          h: height ?? shape.props.h,
+        };
+      }
+    }
+
+    // Apply scale (multiplies current dimensions)
+    if (scale !== undefined && scale > 0) {
+      if (shape.type === 'geo') {
+        const currentWidth = shape.props.w;
+        const currentHeight = shape.props.h;
+        updates.props = {
+          ...shape.props,
+          w: currentWidth * scale,
+          h: currentHeight * scale,
+        };
+      }
+    }
+
+    // Apply rotation (convert degrees to radians)
+    if (rotation !== undefined) {
+      const radians = (rotation * Math.PI) / 180;
+      updates.rotation = radians;
+    }
+
+    editor.updateShape(updates);
+    transformedShapeIds.push(shape.id);
+  });
+
+  // Select the transformed shapes
+  if (transformedShapeIds.length > 0) {
+    editor.select(...transformedShapeIds);
+  }
+
+  return transformedShapeIds;
+}
+

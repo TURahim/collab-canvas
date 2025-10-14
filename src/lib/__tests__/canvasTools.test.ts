@@ -11,6 +11,11 @@ import {
   createGrid,
   sortShapesByPosition,
   calculateGridLayout,
+  createLoginForm,
+  createCard,
+  createNavigationBar,
+  createMultiShapeLayout,
+  positionRelativeToCenter,
 } from '../canvasTools';
 import type { Editor, TLShapeId } from '@tldraw/tldraw';
 
@@ -705,6 +710,371 @@ describe('canvasTools', () => {
     it('should throw error when editor is null', () => {
       expect(() => {
         createGrid(null as any, {});
+      }).toThrow('Editor is required');
+    });
+  });
+
+  // Helper Functions Tests
+  describe('positionRelativeToCenter', () => {
+    it('should calculate position relative to center with positive offset', () => {
+      const center = { x: 100, y: 100 };
+      const result = positionRelativeToCenter(center, 50, 30);
+      expect(result).toEqual({ x: 150, y: 130 });
+    });
+
+    it('should calculate position relative to center with negative offset', () => {
+      const center = { x: 100, y: 100 };
+      const result = positionRelativeToCenter(center, -50, -30);
+      expect(result).toEqual({ x: 50, y: 70 });
+    });
+
+    it('should handle zero offsets', () => {
+      const center = { x: 100, y: 100 };
+      const result = positionRelativeToCenter(center, 0, 0);
+      expect(result).toEqual({ x: 100, y: 100 });
+    });
+  });
+
+  describe('createMultiShapeLayout', () => {
+    it('should create multiple shapes from definitions', () => {
+      const shapeDefinitions = [
+        { shapeType: 'rectangle' as const, x: 100, y: 100, width: 200, height: 150, color: 'red' },
+        { shapeType: 'ellipse' as const, x: 200, y: 200, width: 100, height: 100, color: 'blue' },
+      ];
+
+      const result = createMultiShapeLayout(mockEditor, shapeDefinitions);
+
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(2);
+    });
+
+    it('should create text shapes from definitions', () => {
+      const shapeDefinitions = [
+        { shapeType: 'text' as const, x: 100, y: 100, width: 200, height: 50, text: 'Hello', fontSize: 24, color: 'black' },
+      ];
+
+      createMultiShapeLayout(mockEditor, shapeDefinitions);
+
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(1);
+      const call = (mockEditor.createShape as jest.Mock).mock.calls[0][0];
+      expect(call.type).toBe('text');
+      expect(call.props.text).toBe('Hello');
+    });
+
+    it('should throw error when editor is null', () => {
+      expect(() => {
+        createMultiShapeLayout(null as any, []);
+      }).toThrow('Editor is required');
+    });
+  });
+
+  // Complex Commands Tests
+  describe('createLoginForm', () => {
+    it('should create exactly 5 shapes for login form', () => {
+      const result = createLoginForm(mockEditor);
+
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(5);
+      expect(result).toHaveLength(5);
+    });
+
+    it('should create background rectangle', () => {
+      createLoginForm(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const backgroundCall = calls[0][0];
+      
+      expect(backgroundCall.type).toBe('geo');
+      expect(backgroundCall.props.w).toBe(300);
+      expect(backgroundCall.props.h).toBe(300);
+      expect(backgroundCall.props.color).toBe('light-blue');
+    });
+
+    it('should create title text with correct properties', () => {
+      createLoginForm(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const titleCall = calls[1][0];
+      
+      expect(titleCall.type).toBe('text');
+      expect(titleCall.props.text).toBe('Login');
+      expect(titleCall.props.size).toBe('l'); // 32px maps to l (≤32)
+    });
+
+    it('should create two input fields', () => {
+      createLoginForm(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const usernameCall = calls[2][0];
+      const passwordCall = calls[3][0];
+      
+      expect(usernameCall.type).toBe('geo');
+      expect(usernameCall.props.w).toBe(250);
+      expect(usernameCall.props.h).toBe(40);
+      
+      expect(passwordCall.type).toBe('geo');
+      expect(passwordCall.props.w).toBe(250);
+      expect(passwordCall.props.h).toBe(40);
+    });
+
+    it('should create submit button', () => {
+      createLoginForm(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const buttonCall = calls[4][0];
+      
+      expect(buttonCall.type).toBe('geo');
+      expect(buttonCall.props.w).toBe(150);
+      expect(buttonCall.props.h).toBe(40);
+      expect(buttonCall.props.color).toBe('blue');
+    });
+
+    it('should position all shapes centered in viewport', () => {
+      createLoginForm(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      // All shapes should be centered around viewport center (500, 400)
+      calls.forEach(call => {
+        expect(call[0].x).toBeDefined();
+        expect(call[0].y).toBeDefined();
+      });
+    });
+
+    it('should select all created shapes', () => {
+      const result = createLoginForm(mockEditor);
+
+      expect(mockEditor.select).toHaveBeenCalledWith(...result);
+    });
+
+    it('should throw error when editor is null', () => {
+      expect(() => {
+        createLoginForm(null as any);
+      }).toThrow('Editor is required');
+    });
+  });
+
+  describe('createCard', () => {
+    it('should create exactly 4 shapes for card layout', () => {
+      const result = createCard(mockEditor);
+
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(4);
+      expect(result).toHaveLength(4);
+    });
+
+    it('should use default values when no parameters provided', () => {
+      createCard(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const titleCall = calls[1][0];
+      const subtitleCall = calls[2][0];
+      
+      expect(titleCall.props.text).toBe('Card Title');
+      expect(subtitleCall.props.text).toBe('Card subtitle');
+    });
+
+    it('should use custom title when provided', () => {
+      createCard(mockEditor, { title: 'Custom Title' });
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const titleCall = calls[1][0];
+      
+      expect(titleCall.props.text).toBe('Custom Title');
+    });
+
+    it('should use custom subtitle when provided', () => {
+      createCard(mockEditor, { subtitle: 'Custom Subtitle' });
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const subtitleCall = calls[2][0];
+      
+      expect(subtitleCall.props.text).toBe('Custom Subtitle');
+    });
+
+    it('should use custom color when provided', () => {
+      createCard(mockEditor, { color: 'red' });
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const backgroundCall = calls[0][0];
+      
+      expect(backgroundCall.props.color).toBe('red');
+    });
+
+    it('should create card background with correct dimensions', () => {
+      createCard(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const backgroundCall = calls[0][0];
+      
+      expect(backgroundCall.type).toBe('geo');
+      expect(backgroundCall.props.w).toBe(300);
+      expect(backgroundCall.props.h).toBe(200);
+    });
+
+    it('should create title with correct font size', () => {
+      createCard(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const titleCall = calls[1][0];
+      
+      expect(titleCall.type).toBe('text');
+      expect(titleCall.props.size).toBe('m'); // 24px maps to m (≤24)
+    });
+
+    it('should create subtitle with correct font size and color', () => {
+      createCard(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const subtitleCall = calls[2][0];
+      
+      expect(subtitleCall.type).toBe('text');
+      expect(subtitleCall.props.size).toBe('s'); // 16px maps to s (≤16)
+      expect(subtitleCall.props.color).toBe('grey');
+    });
+
+    it('should create content placeholder', () => {
+      createCard(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const contentCall = calls[3][0];
+      
+      expect(contentCall.type).toBe('geo');
+      expect(contentCall.props.w).toBe(280);
+      expect(contentCall.props.h).toBe(80);
+      expect(contentCall.props.color).toBe('white');
+    });
+
+    it('should select all created shapes', () => {
+      const result = createCard(mockEditor);
+
+      expect(mockEditor.select).toHaveBeenCalledWith(...result);
+    });
+
+    it('should throw error when editor is null', () => {
+      expect(() => {
+        createCard(null as any);
+      }).toThrow('Editor is required');
+    });
+  });
+
+  describe('createNavigationBar', () => {
+    it('should create correct number of shapes for navigation bar with default menu items', () => {
+      const result = createNavigationBar(mockEditor);
+
+      // 1 nav bar + 1 logo + 4 menu items * 2 (button + text) = 10 shapes
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(10);
+      expect(result).toHaveLength(10);
+    });
+
+    it('should use default menu items when not provided', () => {
+      createNavigationBar(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      // Check text shapes for menu items (every other shape starting from index 2)
+      const menuTexts = calls.filter(call => call[0].type === 'text').slice(1); // Skip logo
+      
+      expect(menuTexts.length).toBe(4);
+    });
+
+    it('should use custom menu items when provided', () => {
+      const customMenuItems = ['Dashboard', 'Profile', 'Settings'];
+      const result = createNavigationBar(mockEditor, { menuItems: customMenuItems });
+
+      // 1 nav bar + 1 logo + 3 menu items * 2 = 8 shapes
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(8);
+      expect(result).toHaveLength(8);
+    });
+
+    it('should use custom logo text when provided', () => {
+      createNavigationBar(mockEditor, { logoText: 'MyApp' });
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const logoCall = calls[1][0];
+      
+      expect(logoCall.type).toBe('text');
+      expect(logoCall.props.text).toBe('MyApp');
+    });
+
+    it('should use custom color when provided', () => {
+      createNavigationBar(mockEditor, { color: 'grey' });
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const navBarCall = calls[0][0];
+      
+      expect(navBarCall.props.color).toBe('grey');
+    });
+
+    it('should create nav bar background with correct dimensions', () => {
+      createNavigationBar(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const navBarCall = calls[0][0];
+      
+      expect(navBarCall.type).toBe('geo');
+      expect(navBarCall.props.w).toBe(800);
+      expect(navBarCall.props.h).toBe(60);
+    });
+
+    it('should create logo on the left side', () => {
+      createNavigationBar(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const logoCall = calls[1][0];
+      
+      expect(logoCall.type).toBe('text');
+      expect(logoCall.props.text).toBe('Logo');
+      expect(logoCall.props.size).toBe('m'); // 24px maps to m (≤24)
+      expect(logoCall.props.color).toBe('white');
+    });
+
+    it('should create menu buttons with correct dimensions', () => {
+      createNavigationBar(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      // Menu buttons start at index 2, alternating (button at even indices, text at odd)
+      const firstButton = calls[2][0];
+      
+      expect(firstButton.type).toBe('geo');
+      expect(firstButton.props.w).toBe(100);
+      expect(firstButton.props.h).toBe(35);
+      expect(firstButton.props.color).toBe('grey');
+    });
+
+    it('should create menu item text with white color', () => {
+      createNavigationBar(mockEditor);
+
+      const calls = (mockEditor.createShape as jest.Mock).mock.calls;
+      const firstMenuText = calls[3][0];
+      
+      expect(firstMenuText.type).toBe('text');
+      expect(firstMenuText.props.color).toBe('white');
+      expect(firstMenuText.props.size).toBe('s'); // 16px maps to s (≤16)
+    });
+
+    it('should select all created shapes', () => {
+      const result = createNavigationBar(mockEditor);
+
+      expect(mockEditor.select).toHaveBeenCalledWith(...result);
+    });
+
+    it('should handle single menu item', () => {
+      const result = createNavigationBar(mockEditor, { menuItems: ['Home'] });
+
+      // 1 nav bar + 1 logo + 1 menu item * 2 = 4 shapes
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(4);
+      expect(result).toHaveLength(4);
+    });
+
+    it('should handle many menu items', () => {
+      const manyItems = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
+      const result = createNavigationBar(mockEditor, { menuItems: manyItems });
+
+      // 1 nav bar + 1 logo + 6 menu items * 2 = 14 shapes
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(14);
+      expect(result).toHaveLength(14);
+    });
+
+    it('should throw error when editor is null', () => {
+      expect(() => {
+        createNavigationBar(null as any);
       }).toThrow('Editor is required');
     });
   });

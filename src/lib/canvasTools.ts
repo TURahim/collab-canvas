@@ -775,3 +775,368 @@ export function createGrid(
   return createdShapeIds;
 }
 
+/**
+ * Helper function: Position relative to center
+ * 
+ * @param center - Base center point { x, y }
+ * @param offsetX - X offset from center
+ * @param offsetY - Y offset from center
+ * @returns Absolute position { x, y }
+ */
+export function positionRelativeToCenter(
+  center: { x: number; y: number },
+  offsetX: number,
+  offsetY: number
+): { x: number; y: number } {
+  return {
+    x: center.x + offsetX,
+    y: center.y + offsetY,
+  };
+}
+
+/**
+ * Helper function: Create multiple shapes in a single transaction
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapeDefinitions - Array of shape definitions
+ * @returns Array of created shape IDs
+ */
+export interface ShapeDefinition {
+  shapeType: 'rectangle' | 'ellipse' | 'text';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;
+  text?: string;
+  fontSize?: number;
+}
+
+export function createMultiShapeLayout(
+  editor: Editor,
+  shapeDefinitions: ShapeDefinition[]
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const createdShapeIds: TLShapeId[] = [];
+
+  // Create each shape
+  shapeDefinitions.forEach((shapeDef) => {
+    if (shapeDef.shapeType === 'text') {
+      const shapeId = createTextShape(editor, {
+        text: shapeDef.text || '',
+        x: shapeDef.x,
+        y: shapeDef.y,
+        fontSize: shapeDef.fontSize,
+        color: shapeDef.color,
+      });
+      createdShapeIds.push(shapeId);
+    } else {
+      const shapeId = createShape(editor, {
+        shapeType: shapeDef.shapeType,
+        x: shapeDef.x,
+        y: shapeDef.y,
+        width: shapeDef.width,
+        height: shapeDef.height,
+        color: shapeDef.color,
+      });
+      createdShapeIds.push(shapeId);
+    }
+  });
+
+  return createdShapeIds;
+}
+
+/**
+ * Create a login form interface
+ * 
+ * Creates 5 shapes:
+ * 1. Background rectangle (300x300, light-blue)
+ * 2. Title text ("Login", size: 32)
+ * 3. Username input field (250x40, white)
+ * 4. Password input field (250x40, white)
+ * 5. Submit button (150x40, blue)
+ * 
+ * @param editor - tldraw editor instance
+ * @returns Array of created shape IDs
+ */
+export function createLoginForm(editor: Editor): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  console.log('[createLoginForm] Creating login form with 5 shapes');
+
+  const center = getViewportCenter(editor);
+  
+  // Define the 5 shapes for the login form
+  const shapes: ShapeDefinition[] = [
+    // 1. Background rectangle (300x300, light-blue)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y,
+      width: 300,
+      height: 300,
+      color: 'light-blue',
+    },
+    // 2. Title text ("Login", size: 32)
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y - 100,
+      width: 200,
+      height: 50,
+      text: 'Login',
+      fontSize: 32,
+      color: 'black',
+    },
+    // 3. Username input field (250x40, white with grey border)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y - 30,
+      width: 250,
+      height: 40,
+      color: 'grey',
+    },
+    // 4. Password input field (250x40, white with grey border)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y + 30,
+      width: 250,
+      height: 40,
+      color: 'grey',
+    },
+    // 5. Submit button (150x40, blue)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y + 90,
+      width: 150,
+      height: 40,
+      color: 'blue',
+    },
+  ];
+
+  // Create all shapes
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+
+  console.log(`[createLoginForm] Created ${createdShapeIds.length} shapes`);
+
+  // Select all created shapes
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  return createdShapeIds;
+}
+
+/**
+ * Create a card layout
+ * 
+ * Creates 4 shapes:
+ * 1. Card background (300x200, customizable color)
+ * 2. Title text (size: 24)
+ * 3. Subtitle text (size: 16, grey)
+ * 4. Content placeholder (280x80, white)
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Card parameters
+ * @returns Array of created shape IDs
+ */
+export interface CreateCardParams {
+  title?: string; // Card title (default: "Card Title")
+  subtitle?: string; // Card subtitle (default: "Card subtitle")
+  color?: string; // Card background color (default: "light-blue")
+}
+
+export function createCard(
+  editor: Editor,
+  params: CreateCardParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    title = 'Card Title',
+    subtitle = 'Card subtitle',
+    color = 'light-blue',
+  } = params;
+
+  console.log('[createCard] Creating card with 4 shapes');
+
+  const center = getViewportCenter(editor);
+  
+  // Define the 4 shapes for the card
+  const shapes: ShapeDefinition[] = [
+    // 1. Card background (300x200, customizable color)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y,
+      width: 300,
+      height: 200,
+      color: mapToTldrawColor(color),
+    },
+    // 2. Title text (size: 24)
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y - 60,
+      width: 280,
+      height: 40,
+      text: title,
+      fontSize: 24,
+      color: 'black',
+    },
+    // 3. Subtitle text (size: 16, grey)
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y - 20,
+      width: 280,
+      height: 30,
+      text: subtitle,
+      fontSize: 16,
+      color: 'grey',
+    },
+    // 4. Content placeholder (280x80, white)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y + 40,
+      width: 280,
+      height: 80,
+      color: 'white',
+    },
+  ];
+
+  // Create all shapes
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+
+  console.log(`[createCard] Created ${createdShapeIds.length} shapes`);
+
+  // Select all created shapes
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  return createdShapeIds;
+}
+
+/**
+ * Create a navigation bar
+ * 
+ * Creates 9-10 shapes:
+ * 1. Nav bar background (800x60, dark color)
+ * 2. Logo text (left side)
+ * 3-10. 4 menu item buttons + 4 text labels
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Navigation bar parameters
+ * @returns Array of created shape IDs
+ */
+export interface CreateNavigationBarParams {
+  menuItems?: string[]; // Array of menu item labels (default: ['Home', 'About', 'Services', 'Contact'])
+  logoText?: string; // Logo text (default: "Logo")
+  color?: string; // Nav bar background color (default: "black")
+}
+
+export function createNavigationBar(
+  editor: Editor,
+  params: CreateNavigationBarParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    menuItems = ['Home', 'About', 'Services', 'Contact'],
+    logoText = 'Logo',
+    color = 'black',
+  } = params;
+
+  console.log('[createNavigationBar] Creating navigation bar with menu items:', menuItems);
+
+  const center = getViewportCenter(editor);
+  
+  // Navigation bar dimensions
+  const navWidth = 800;
+  const navHeight = 60;
+  const buttonWidth = 100;
+  const buttonHeight = 35;
+  const menuItemSpacing = 20;
+
+  // Starting position for menu items (right side of nav bar)
+  const totalMenuWidth = menuItems.length * buttonWidth + (menuItems.length - 1) * menuItemSpacing;
+  const menuStartX = center.x + navWidth / 2 - totalMenuWidth / 2 - 50;
+
+  const shapes: ShapeDefinition[] = [];
+
+  // 1. Nav bar background (800x60, dark color)
+  shapes.push({
+    shapeType: 'rectangle',
+    x: center.x,
+    y: center.y,
+    width: navWidth,
+    height: navHeight,
+    color: mapToTldrawColor(color),
+  });
+
+  // 2. Logo text (left side)
+  shapes.push({
+    shapeType: 'text',
+    x: center.x - navWidth / 2 + 80,
+    y: center.y,
+    width: 120,
+    height: 40,
+    text: logoText,
+    fontSize: 24,
+    color: 'white',
+  });
+
+  // 3-10. Create menu items (buttons + text)
+  menuItems.forEach((item, index) => {
+    const menuItemX = menuStartX + index * (buttonWidth + menuItemSpacing);
+    
+    // Button background
+    shapes.push({
+      shapeType: 'rectangle',
+      x: menuItemX,
+      y: center.y,
+      width: buttonWidth,
+      height: buttonHeight,
+      color: 'grey',
+    });
+
+    // Button text
+    shapes.push({
+      shapeType: 'text',
+      x: menuItemX,
+      y: center.y,
+      width: buttonWidth - 10,
+      height: 30,
+      text: item,
+      fontSize: 16,
+      color: 'white',
+    });
+  });
+
+  // Create all shapes
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+
+  console.log(`[createNavigationBar] Created ${createdShapeIds.length} shapes (nav bar + logo + ${menuItems.length * 2} menu items)`);
+
+  // Select all created shapes
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  return createdShapeIds;
+}
+

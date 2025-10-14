@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { TLShape, TLRecord } from "@tldraw/tldraw";
+import { withRetry } from "./utils";
 
 // Shape document structure in Firestore
 export interface FirestoreShape {
@@ -48,27 +49,28 @@ export async function writeShapeToFirestore(
   userId: string
 ): Promise<void> {
   try {
-    const shapeRef = doc(db, `rooms/${roomId}/shapes`, shape.id);
-    
-    const firestoreShape: Omit<FirestoreShape, 'createdAt' | 'updatedAt'> = {
-      id: shape.id,
-      type: shape.type,
-      x: shape.x,
-      y: shape.y,
-      rotation: shape.rotation,
-      props: shape.props as Record<string, unknown>,
-      parentId: shape.parentId,
-      index: shape.index,
-      opacity: shape.opacity,
-      createdBy: userId,
-    };
+    await withRetry(async () => {
+      const shapeRef = doc(db, `rooms/${roomId}/shapes`, shape.id);
+      
+      const firestoreShape: Omit<FirestoreShape, 'createdAt' | 'updatedAt'> = {
+        id: shape.id,
+        type: shape.type,
+        x: shape.x,
+        y: shape.y,
+        rotation: shape.rotation,
+        props: shape.props as Record<string, unknown>,
+        parentId: shape.parentId,
+        index: shape.index,
+        opacity: shape.opacity,
+        createdBy: userId,
+      };
 
-    await setDoc(shapeRef, {
-      ...firestoreShape,
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(), // Will only be set on first write
-    }, { merge: true });
-
+      await setDoc(shapeRef, {
+        ...firestoreShape,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(), // Will only be set on first write
+      }, { merge: true });
+    });
   } catch (error) {
     console.error("Error writing shape to Firestore:", error);
     throw error;
@@ -86,8 +88,10 @@ export async function deleteShapeFromFirestore(
   shapeId: string
 ): Promise<void> {
   try {
-    const shapeRef = doc(db, `rooms/${roomId}/shapes`, shapeId);
-    await deleteDoc(shapeRef);
+    await withRetry(async () => {
+      const shapeRef = doc(db, `rooms/${roomId}/shapes`, shapeId);
+      await deleteDoc(shapeRef);
+    });
   } catch (error) {
     console.error("Error deleting shape from Firestore:", error);
     throw error;

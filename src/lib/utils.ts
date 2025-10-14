@@ -169,3 +169,30 @@ export function throttle<T extends (...args: unknown[]) => unknown>(
   };
 }
 
+/**
+ * Simple retry helper with exponential backoff
+ * @param fn - async function to execute
+ * @param retries - number of attempts
+ * @param baseDelayMs - initial delay in ms
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  baseDelayMs = 250
+): Promise<T> {
+  let attempt = 0;
+  let lastError: unknown;
+  while (attempt <= retries) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt === retries) break;
+      const delay = baseDelayMs * Math.pow(2, attempt);
+      await new Promise((res) => setTimeout(res, delay));
+      attempt += 1;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Operation failed after retries");
+}
+

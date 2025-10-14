@@ -15,6 +15,7 @@ import {
 } from "firebase/database";
 import { realtimeDb } from "./firebase";
 import { UserPresence, Cursor } from "../types";
+import { withRetry } from "./utils";
 
 /**
  * Updates the current user's cursor position in Realtime Database
@@ -60,24 +61,26 @@ export async function updateUserPresence(
   const userRef = ref(realtimeDb, `users/${userId}`);
   
   try {
-    // Set user as online with current info
-    await update(userRef, {
-      name,
-      color,
-      online: true,
-      lastSeen: serverTimestamp(),
-    });
+    await withRetry(async () => {
+      // Set user as online with current info
+      await update(userRef, {
+        name,
+        color,
+        online: true,
+        lastSeen: serverTimestamp(),
+      });
 
-    // Configure auto-cleanup on disconnect
-    const disconnectRef = onDisconnect(userRef);
-    await disconnectRef.update({
-      online: false,
-      lastSeen: serverTimestamp(),
-    });
+      // Configure auto-cleanup on disconnect
+      const disconnectRef = onDisconnect(userRef);
+      await disconnectRef.update({
+        online: false,
+        lastSeen: serverTimestamp(),
+      });
 
-    // Remove cursor on disconnect
-    const cursorRef = ref(realtimeDb, `users/${userId}/cursor`);
-    await onDisconnect(cursorRef).remove();
+      // Remove cursor on disconnect
+      const cursorRef = ref(realtimeDb, `users/${userId}/cursor`);
+      await onDisconnect(cursorRef).remove();
+    });
   } catch (error) {
     console.error("Error updating user presence:", error);
   }

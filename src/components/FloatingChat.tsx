@@ -14,7 +14,8 @@ import type { Message } from '@/types/ai';
 import { ChatMessage } from './ChatMessage';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { executeAICommand, parseAIError } from '@/lib/aiService';
-import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid, createLoginForm, createCard, createNavigationBar } from '@/lib/canvasTools';
+import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid } from '@/lib/canvasTools';
+// Note: createLoginForm, createCard, createNavigationBar are temporarily disabled due to tldraw v4 text limitations
 
 interface FloatingChatProps {
   editor: Editor | null;
@@ -271,34 +272,15 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               break;
               
             case 'createLoginForm':
-              {
-                const formIds = createLoginForm(editor);
-                addMessage('system', `✅ Created login form with ${formIds.length} components (background, title, username, password, button)`);
-              }
+              addMessage('system', `🚧 Complex UI commands (login forms, cards, navigation bars) are coming soon! Due to tldraw v4 limitations with programmatic text, these features will be added in a future update. For now, try: shapes, grids, move, transform, and arrange commands!`);
               break;
               
             case 'createCard':
-              {
-                const cardIds = createCard(editor, {
-                  title: (args as any).title as string | undefined,
-                  subtitle: (args as any).subtitle as string | undefined,
-                  color: (args as any).color as string | undefined,
-                });
-                const title = (args as any).title || 'Card Title';
-                addMessage('system', `✅ Created card layout: "${title}" (${cardIds.length} components)`);
-              }
+              addMessage('system', `🚧 Complex UI commands (login forms, cards, navigation bars) are coming soon! Due to tldraw v4 limitations with programmatic text, these features will be added in a future update. For now, try: shapes, grids, move, transform, and arrange commands!`);
               break;
               
             case 'createNavigationBar':
-              {
-                const navIds = createNavigationBar(editor, {
-                  menuItems: (args as any).menuItems as string[] | undefined,
-                  logoText: (args as any).logoText as string | undefined,
-                  color: (args as any).color as string | undefined,
-                });
-                const menuCount = (args as any).menuItems?.length || 4;
-                addMessage('system', `✅ Created navigation bar with ${menuCount} menu items (${navIds.length} components)`);
-              }
+              addMessage('system', `🚧 Complex UI commands (login forms, cards, navigation bars) are coming soon! Due to tldraw v4 limitations with programmatic text, these features will be added in a future update. For now, try: shapes, grids, move, transform, and arrange commands!`);
               break;
               
             default:

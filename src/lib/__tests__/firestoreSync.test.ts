@@ -237,9 +237,9 @@ describe("Debounce logic for shape updates", () => {
 
   it("debounce respects 300ms delay", () => {
     const mockFn = jest.fn();
-    const debounce = (fn: Function, delay: number) => {
+    const debounce = <T extends unknown[]>(fn: (...args: T) => void, delay: number) => {
       let timeout: NodeJS.Timeout;
-      return (...args: any[]) => {
+      return (...args: T): void => {
         clearTimeout(timeout);
         timeout = setTimeout(() => fn(...args), delay);
       };
@@ -257,9 +257,9 @@ describe("Debounce logic for shape updates", () => {
 
   it("debounce cancels previous calls", () => {
     const mockFn = jest.fn();
-    const debounce = (fn: Function, delay: number) => {
+    const debounce = <T extends unknown[]>(fn: (...args: T) => void, delay: number) => {
       let timeout: NodeJS.Timeout;
-      return (...args: any[]) => {
+      return (...args: T): void => {
         clearTimeout(timeout);
         timeout = setTimeout(() => fn(...args), delay);
       };
@@ -282,9 +282,9 @@ describe("Debounce logic for shape updates", () => {
 
   it("debounce batches rapid shape movements", () => {
     const mockFn = jest.fn();
-    const debounce = (fn: Function, delay: number) => {
+    const debounce = <T extends unknown[]>(fn: (...args: T) => void, delay: number) => {
       let timeout: NodeJS.Timeout;
-      return (...args: any[]) => {
+      return (...args: T): void => {
         clearTimeout(timeout);
         timeout = setTimeout(() => fn(...args), delay);
       };

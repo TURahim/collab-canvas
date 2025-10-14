@@ -7,8 +7,6 @@ import {
   ref,
   get,
   remove,
-  update,
-  onValue,
 } from "firebase/database";
 import { realtimeDb } from "../firebase";
 import {
@@ -20,7 +18,6 @@ import {
   getOnlineUsers,
   setupPresenceHeartbeat,
 } from "../realtimeSync";
-import { UserPresence, Cursor } from "../../types";
 
 // Test user data
 const testUser1 = {

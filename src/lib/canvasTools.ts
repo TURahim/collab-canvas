@@ -250,16 +250,26 @@ export function createTextShape(
   }
 
   // Create the text shape
+  // In tldraw v4, text shapes don't accept text in props during creation
+  // We need to create the shape first, then update it with text
   editor.createShape({
     id: shapeId,
     type: 'text',
     x: posX - estimatedWidth / 2,
     y: posY - textFontSize / 2,
     props: {
-      text: text.trim(),
       size: tlSize,
       color: tlColor,
       w: estimatedWidth,
+    },
+  });
+
+  // Immediately update with text content (synchronous)
+  editor.updateShape({
+    id: shapeId,
+    type: 'text',
+    props: {
+      text: text.trim(),
     },
   });
 

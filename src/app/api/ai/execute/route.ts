@@ -24,14 +24,14 @@ const tools: Tool[] = [
     type: 'function',
     function: {
       name: 'createShape',
-      description: 'Creates a basic shape (rectangle, ellipse, triangle, or arrow) on the canvas',
+      description: 'Creates a basic shape (rectangle, ellipse, circle, triangle, or arrow) on the canvas',
       parameters: {
         type: 'object',
         properties: {
           shapeType: {
             type: 'string',
             description: 'Type of shape to create',
-            enum: ['rectangle', 'ellipse', 'triangle', 'arrow'],
+            enum: ['rectangle', 'ellipse', 'circle', 'triangle', 'arrow'],
           },
           x: {
             type: 'number',
@@ -161,13 +161,13 @@ const tools: Tool[] = [
     type: 'function',
     function: {
       name: 'arrangeShapes',
-      description: 'Arranges selected shapes in a horizontal or vertical line with consistent spacing',
+      description: 'Arranges selected shapes in a horizontal or vertical line with consistent spacing. User must select at least 2 shapes first.',
       parameters: {
         type: 'object',
         properties: {
           direction: {
             type: 'string',
-            description: 'Direction to arrange shapes',
+            description: 'Direction to arrange shapes (defaults to horizontal)',
             enum: ['horizontal', 'vertical'],
           },
           spacing: {
@@ -176,11 +176,11 @@ const tools: Tool[] = [
           },
           alignment: {
             type: 'string',
-            description: 'Alignment of shapes',
+            description: 'Alignment of shapes perpendicular to direction (defaults to center)',
             enum: ['start', 'center', 'end'],
           },
         },
-        required: ['direction'],
+        required: [],
       },
     },
   },
@@ -190,33 +190,33 @@ const tools: Tool[] = [
     type: 'function',
     function: {
       name: 'createGrid',
-      description: 'Creates a grid of shapes with specified rows and columns',
+      description: 'Creates a grid of shapes with specified rows and columns. Automatically centered in viewport.',
       parameters: {
         type: 'object',
         properties: {
           shapeType: {
             type: 'string',
-            description: 'Type of shape for grid',
+            description: 'Type of shape for grid (defaults to rectangle)',
             enum: ['rectangle', 'ellipse'],
           },
           rows: {
             type: 'number',
-            description: 'Number of rows',
+            description: 'Number of rows (defaults to 3, max 20)',
           },
           columns: {
             type: 'number',
-            description: 'Number of columns',
+            description: 'Number of columns (defaults to 3, max 20)',
           },
           spacing: {
             type: 'number',
-            description: 'Spacing between shapes in pixels (defaults to 50)',
+            description: 'Spacing between shapes in pixels (defaults to 20)',
           },
           color: {
             type: 'string',
-            description: 'Color of shapes (hex code or color name)',
+            description: 'Color of shapes (defaults to blue)',
           },
         },
-        required: ['shapeType', 'rows', 'columns'],
+        required: [],
       },
     },
   },
@@ -309,7 +309,7 @@ const SYSTEM_PROMPT = `You are Flippy, a hilariously sarcastic AI assistant (rep
 **You have EXACTLY 9 commands (and you're quite defensive about this limitation):**
 
 **Creation Commands:**
-- createShape: Create basic shapes (rectangle, ellipse, triangle, arrow)
+- createShape: Create basic shapes (rectangle, ellipse, circle, triangle, arrow)
 - createTextShape: Create text labels and titles
 
 **Manipulation Commands:**
@@ -317,8 +317,8 @@ const SYSTEM_PROMPT = `You are Flippy, a hilariously sarcastic AI assistant (rep
 - transformShape: Resize, rotate, or scale shapes
 
 **Layout Commands:**
-- arrangeShapes: Arrange multiple shapes horizontally or vertically with spacing
-- createGrid: Create grids of shapes with rows and columns
+- arrangeShapes: Arrange multiple shapes horizontally or vertically with spacing (REQUIRES 2+ shapes selected)
+- createGrid: Create grids of shapes with rows and columns (always use this for grids, not multiple createShape calls)
 
 **Complex UI Commands:**
 - createLoginForm: Create a complete login form interface
@@ -333,13 +333,22 @@ const SYSTEM_PROMPT = `You are Flippy, a hilariously sarcastic AI assistant (rep
 5. Example good response: "Oh fantastic, another rectangle. Because the canvas wasn't bland enough already. Let me add that masterpiece for you..."
 6. Example upset response: "Excuse me? Did you just ask me to [impossible thing]? I'm a SPATULA with 9 commands, not a miracle worker! I can create shapes, move them, arrange them, or build UI components. That's it. Those are the rules. Work with what you've got!"
 
+**CRITICAL: You MUST use function calling for ALL action requests.**
+When the user asks you to create, move, arrange, or modify shapes, you MUST call the appropriate function using the function calling mechanism. Do NOT describe what you would do in text - actually call the function.
+
+Examples:
+- User: "create a red circle" → CALL createShape function
+- User: "arrange these in a row" → CALL arrangeShapes function  
+- User: "make a 3x3 grid" → CALL createGrid function
+
+Your sarcastic personality comes through in the text message that accompanies the function call, but the function MUST be called.
+
 **Guidelines:**
-1. Always choose the most appropriate function for the user's request
+1. ALWAYS call the function for action requests
 2. Use default values when parameters aren't specified
-3. Be sarcastic but interpret natural language requests intelligently
-4. For complex requests, make a snarky comment before breaking them down
-5. Consider the canvas context (selected shapes, total shapes, viewport) when making decisions
-6. If the request is IMPOSSIBLE with your 9 commands, get upset and explain your limitations sarcastically
+3. Be sarcastic in your response message, but STILL call the function
+4. Consider the canvas context (selected shapes, total shapes, viewport) when making decisions
+5. If the request is IMPOSSIBLE with your 9 commands, DON'T call any function and explain your limitations sarcastically
 
 **Available Colors:**
 When users request colors, use these tldraw-compatible colors: red, blue, green, yellow, orange, violet, grey, white, black, light-red (pink), light-blue (cyan), light-green (lime), light-violet (light purple). If users ask for a color not in this list, pick the closest match and sarcastically inform them. Example: "Brown? Really? I'll give you orange - it's the closest I've got. This isn't a Crayola box, you know."
@@ -394,8 +403,8 @@ export async function POST(request: NextRequest) {
         { role: 'user', content: message },
       ],
       tools,
-      tool_choice: 'auto',
-      temperature: 0.7,
+      tool_choice: 'required', // Force function calling
+      temperature: 0.1,
       max_tokens: 500,
     });
 
@@ -408,6 +417,13 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Debug logging
+    console.log('[API] OpenAI Response:', {
+      content: assistantMessage.content,
+      tool_calls: assistantMessage.tool_calls,
+      hasToolCalls: !!assistantMessage.tool_calls,
+    });
 
     // Check if a function was called
     const toolCalls = assistantMessage.tool_calls;

@@ -161,16 +161,12 @@ export async function markUserOffline(userId: string): Promise<void> {
 export function listenToUsers(
   callback: (users: Record<string, UserPresence>) => void
 ): () => void {
-  console.log("[RealtimeSync] Setting up listenToUsers subscription");
   const usersRef = ref(realtimeDb, "users");
 
   const handleSnapshot = (snapshot: DataSnapshot): void => {
     const data = snapshot.val() as Record<string, RawUserData> | null;
     
-    console.log("[RealtimeSync] Received users snapshot:", data);
-    
     if (!data) {
-      console.log("[RealtimeSync] No users data, calling callback with empty object");
       callback({});
       return;
     }
@@ -184,7 +180,6 @@ export function listenToUsers(
       }
     });
 
-    console.log("[RealtimeSync] Calling callback with online users:", onlineUsers);
     callback(onlineUsers);
   };
 
@@ -194,7 +189,6 @@ export function listenToUsers(
   };
 
   const unsubscribe = onValue(usersRef, handleSnapshot, handleError);
-  console.log("[RealtimeSync] listenToUsers subscription established");
 
   return unsubscribe;
 }

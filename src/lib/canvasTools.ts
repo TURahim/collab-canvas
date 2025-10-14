@@ -69,6 +69,7 @@ const TLDRAW_COLOR_MAP: Record<string, TLDefaultColorStyle> = {
 const DEFAULT_SIZES: Record<string, { width: number; height: number }> = {
   rectangle: { width: 200, height: 150 },
   ellipse: { width: 200, height: 200 },
+  circle: { width: 200, height: 200 }, // Circle is an ellipse with equal dimensions
   triangle: { width: 200, height: 200 },
   arrow: { width: 200, height: 0 },
   text: { width: 200, height: 50 },
@@ -108,7 +109,7 @@ export function getViewportCenter(editor: Editor): { x: number; y: number } {
 export function createShape(
   editor: Editor,
   params: {
-    shapeType: 'rectangle' | 'ellipse' | 'triangle' | 'arrow';
+    shapeType: 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'arrow';
     x?: number;
     y?: number;
     width?: number;
@@ -119,7 +120,7 @@ export function createShape(
   const { shapeType, x, y, width, height, color } = params;
 
   // Validate shape type
-  const validTypes = ['rectangle', 'ellipse', 'triangle', 'arrow'];
+  const validTypes = ['rectangle', 'ellipse', 'circle', 'triangle', 'arrow'];
   if (!validTypes.includes(shapeType)) {
     throw new Error(`Invalid shape type: ${shapeType}. Must be one of: ${validTypes.join(', ')}`);
   }
@@ -155,20 +156,30 @@ export function createShape(
       },
     });
   } else {
-    // Geo shapes (rectangle, ellipse, triangle)
+    // Geo shapes (rectangle, ellipse, circle, triangle)
     let geoType: 'rectangle' | 'ellipse' | 'triangle' = 'rectangle';
-    if (shapeType === 'ellipse') geoType = 'ellipse';
+    if (shapeType === 'ellipse' || shapeType === 'circle') geoType = 'ellipse';
     if (shapeType === 'triangle') geoType = 'triangle';
+
+    // For circles, ensure width equals height
+    let finalWidth = shapeWidth;
+    let finalHeight = shapeHeight;
+    if (shapeType === 'circle') {
+      // Use the larger of width/height, or width if both are provided
+      const size = Math.max(shapeWidth, shapeHeight);
+      finalWidth = size;
+      finalHeight = size;
+    }
 
     editor.createShape({
       id: shapeId,
       type: 'geo',
-      x: posX - shapeWidth / 2,
-      y: posY - shapeHeight / 2,
+      x: posX - finalWidth / 2,
+      y: posY - finalHeight / 2,
       props: {
         geo: geoType,
-        w: shapeWidth,
-        h: shapeHeight,
+        w: finalWidth,
+        h: finalHeight,
         color: tlColor,
       },
     });
@@ -491,5 +502,276 @@ export function transformShape(
   }
 
   return transformedShapeIds;
+}
+
+/**
+ * =============================================================================
+ * LAYOUT COMMANDS (Commands 5-6)
+ * =============================================================================
+ */
+
+/**
+ * Sort shapes by position (horizontal or vertical)
+ * 
+ * @param shapes - Array of shapes to sort
+ * @param direction - "horizontal" or "vertical"
+ * @returns Sorted array of shapes
+ */
+export function sortShapesByPosition(
+  editor: Editor,
+  shapes: Array<any>,
+  direction: 'horizontal' | 'vertical'
+): Array<any> {
+  return [...shapes].sort((a, b) => {
+    const boundsA = editor.getShapePageBounds(a.id);
+    const boundsB = editor.getShapePageBounds(b.id);
+    
+    if (!boundsA || !boundsB) return 0;
+    
+    if (direction === 'horizontal') {
+      return boundsA.x - boundsB.x;
+    } else {
+      return boundsA.y - boundsB.y;
+    }
+  });
+}
+
+/**
+ * Arrange selected shapes in a line (horizontal or vertical)
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Arrange parameters
+ * @returns Array of arranged shape IDs
+ */
+export interface ArrangeShapesParams {
+  direction?: 'horizontal' | 'vertical'; // Direction to arrange (default: horizontal)
+  spacing?: number; // Gap between shapes (default: 50px)
+  alignment?: 'start' | 'center' | 'end'; // Alignment perpendicular to direction (default: center)
+}
+
+export function arrangeShapes(
+  editor: Editor,
+  params: ArrangeShapesParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { direction = 'horizontal', spacing = 50, alignment = 'center' } = params;
+
+  // Get selected shapes
+  const shapes = editor.getSelectedShapes();
+  
+  if (shapes.length < 2) {
+    throw new Error('Please select at least 2 shapes to arrange');
+  }
+
+  // Sort shapes by position
+  const sortedShapes = sortShapesByPosition(editor, shapes, direction);
+
+  // Get the first shape's bounds as reference for alignment
+  const firstBounds = editor.getShapePageBounds(sortedShapes[0].id);
+  if (!firstBounds) {
+    throw new Error('Could not get bounds for first shape');
+  }
+
+  // Calculate reference position for alignment
+  const referenceY = firstBounds.y + firstBounds.height / 2; // Center Y of first shape
+  const referenceX = firstBounds.x + firstBounds.width / 2; // Center X of first shape
+
+  // Calculate new positions
+  let currentPosition = 0;
+  const arrangedShapeIds: TLShapeId[] = [];
+
+  sortedShapes.forEach((shape, index) => {
+    const bounds = editor.getShapePageBounds(shape.id);
+    if (!bounds) return;
+
+    let newX = shape.x;
+    let newY = shape.y;
+
+    if (direction === 'horizontal') {
+      // Arrange horizontally
+      if (index === 0) {
+        // Keep first shape position as anchor
+        currentPosition = bounds.x;
+      } else {
+        newX = currentPosition;
+      }
+      
+      // Apply alignment on Y axis (align all shapes vertically)
+      if (alignment === 'start') {
+        // Align tops
+        newY = firstBounds.y;
+      } else if (alignment === 'center') {
+        // Align centers
+        newY = referenceY - bounds.height / 2;
+      } else if (alignment === 'end') {
+        // Align bottoms
+        newY = firstBounds.y + firstBounds.height - bounds.height;
+      }
+
+      currentPosition += bounds.width + spacing;
+    } else {
+      // Arrange vertically
+      if (index === 0) {
+        // Keep first shape position as anchor
+        currentPosition = bounds.y;
+      } else {
+        newY = currentPosition;
+      }
+      
+      // Apply alignment on X axis (align all shapes horizontally)
+      if (alignment === 'start') {
+        // Align lefts
+        newX = firstBounds.x;
+      } else if (alignment === 'center') {
+        // Align centers
+        newX = referenceX - bounds.width / 2;
+      } else if (alignment === 'end') {
+        // Align rights
+        newX = firstBounds.x + firstBounds.width - bounds.width;
+      }
+
+      currentPosition += bounds.height + spacing;
+    }
+
+    // Update shape position
+    editor.updateShape({
+      id: shape.id,
+      type: shape.type,
+      x: newX,
+      y: newY,
+    });
+
+    arrangedShapeIds.push(shape.id);
+  });
+
+  // Select all arranged shapes
+  if (arrangedShapeIds.length > 0) {
+    editor.select(...arrangedShapeIds);
+  }
+
+  return arrangedShapeIds;
+}
+
+/**
+ * Calculate grid layout positions
+ * 
+ * @param editor - tldraw editor instance
+ * @param rows - Number of rows
+ * @param columns - Number of columns
+ * @param shapeSize - Size of each shape { width, height }
+ * @param spacing - Gap between shapes
+ * @returns Array of positions [{ x, y }]
+ */
+export function calculateGridLayout(
+  editor: Editor,
+  rows: number,
+  columns: number,
+  shapeSize: { width: number; height: number },
+  spacing: number
+): Array<{ x: number; y: number }> {
+  const positions: Array<{ x: number; y: number }> = [];
+
+  // Calculate total grid dimensions
+  const totalWidth = columns * shapeSize.width + (columns - 1) * spacing;
+  const totalHeight = rows * shapeSize.height + (rows - 1) * spacing;
+
+  // Get viewport center to position grid
+  const center = getViewportCenter(editor);
+  
+  // Starting position (top-left of grid, centered in viewport)
+  const startX = center.x - totalWidth / 2;
+  const startY = center.y - totalHeight / 2;
+
+  // Generate positions for each cell
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      positions.push({
+        x: startX + col * (shapeSize.width + spacing) + shapeSize.width / 2,
+        y: startY + row * (shapeSize.height + spacing) + shapeSize.height / 2,
+      });
+    }
+  }
+
+  return positions;
+}
+
+/**
+ * Create a grid of shapes
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Grid parameters
+ * @returns Array of created shape IDs
+ */
+export interface CreateGridParams {
+  shapeType?: 'rectangle' | 'ellipse'; // Type of shape to create (default: rectangle)
+  rows?: number; // Number of rows (default: 3)
+  columns?: number; // Number of columns (default: 3)
+  spacing?: number; // Gap between shapes (default: 20px)
+  color?: string; // Color of shapes (default: blue)
+}
+
+export function createGrid(
+  editor: Editor,
+  params: CreateGridParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    shapeType = 'rectangle',
+    rows = 3,
+    columns = 3,
+    spacing = 20,
+    color = 'blue',
+  } = params;
+
+  // Validate parameters
+  if (rows < 1 || rows > 20) {
+    throw new Error('Rows must be between 1 and 20');
+  }
+  if (columns < 1 || columns > 20) {
+    throw new Error('Columns must be between 1 and 20');
+  }
+  if (shapeType !== 'rectangle' && shapeType !== 'ellipse') {
+    throw new Error('Shape type must be rectangle or ellipse');
+  }
+
+  // Get default size for shape type
+  const shapeSize = DEFAULT_SIZES[shapeType];
+
+  // Calculate grid positions
+  const positions = calculateGridLayout(editor, rows, columns, shapeSize, spacing);
+
+  // Create shapes at each position
+  const createdShapeIds: TLShapeId[] = [];
+
+  console.log(`[createGrid] Creating ${rows}x${columns} grid (${positions.length} shapes)`);
+  
+  positions.forEach((position, index) => {
+    console.log(`[createGrid] Creating shape ${index + 1}/${positions.length} at`, position);
+    const shapeId = createShape(editor, {
+      shapeType,
+      x: position.x,
+      y: position.y,
+      width: shapeSize.width,
+      height: shapeSize.height,
+      color,
+    });
+    createdShapeIds.push(shapeId);
+    console.log(`[createGrid] Created shape ${index + 1}: ${shapeId}`);
+  });
+
+  console.log(`[createGrid] Total shapes created: ${createdShapeIds.length}`);
+
+  // Select all created shapes
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  return createdShapeIds;
 }
 

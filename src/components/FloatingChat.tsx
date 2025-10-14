@@ -14,7 +14,7 @@ import type { Message } from '@/types/ai';
 import { ChatMessage } from './ChatMessage';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { executeAICommand, parseAIError } from '@/lib/aiService';
-import { createShape, createTextShape, moveShape, transformShape } from '@/lib/canvasTools';
+import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid } from '@/lib/canvasTools';
 
 interface FloatingChatProps {
   editor: Editor | null;
@@ -112,20 +112,21 @@ export function FloatingChat({ editor }: FloatingChatProps) {
     
     // Validate input
     if (!message) return;
-    if (message.length > 500) {
-      addMessage('error', 'Message is too long. Please keep it under 500 characters.', true);
+    if (message.length > 100) {
+      addMessage('error', 'Message is too long. Please keep it under 100 characters.', true);
       return;
     }
 
-    // Check rate limit
-    if (rateLimit.isBlocked) {
-      addMessage(
-        'error',
-        `Rate limit reached. You can send ${rateLimit.remaining} more commands. Resets in ${rateLimit.getTimeUntilReset()}.`,
-        true
-      );
-      return;
-    }
+    // TODO: Re-enable rate limit for production
+    // Check rate limit (DISABLED FOR DEVELOPMENT)
+    // if (rateLimit.isBlocked) {
+    //   addMessage(
+    //     'error',
+    //     `Rate limit reached. You can send ${rateLimit.remaining} more commands. Resets in ${rateLimit.getTimeUntilReset()}.`,
+    //     true
+    //   );
+    //   return;
+    // }
 
     // Check if editor is available
     if (!editor) {
@@ -143,11 +144,12 @@ export function FloatingChat({ editor }: FloatingChatProps) {
     setIsLoading(true);
 
     try {
-      // Increment rate limit counter
-      const rateLimitSuccess = rateLimit.incrementCount();
-      if (!rateLimitSuccess) {
-        throw new Error('Rate limit exceeded');
-      }
+      // TODO: Re-enable rate limit for production
+      // Increment rate limit counter (DISABLED FOR DEVELOPMENT)
+      // const rateLimitSuccess = rateLimit.incrementCount();
+      // if (!rateLimitSuccess) {
+      //   throw new Error('Rate limit exceeded');
+      // }
 
       // Get canvas context
       const canvasContext = getCanvasContext();
@@ -158,6 +160,8 @@ export function FloatingChat({ editor }: FloatingChatProps) {
         canvasContext,
       });
 
+      console.log('[FloatingChat] AI Response:', response);
+
       // Add assistant response
       addMessage('assistant', response.message);
 
@@ -166,11 +170,18 @@ export function FloatingChat({ editor }: FloatingChatProps) {
         try {
           const { name, arguments: args } = response.functionCall;
           
+          // Validate editor before executing commands
+          if (!editor) {
+            throw new Error('Canvas editor is not available. Please try again.');
+          }
+          
+          console.log('[FloatingChat] Executing function:', name, 'with args:', args);
+          
           // Execute the appropriate canvas tool function
           switch (name) {
             case 'createShape':
               createShape(editor, {
-                shapeType: (args as any).shapeType as 'rectangle' | 'ellipse' | 'triangle' | 'arrow',
+                shapeType: (args as any).shapeType as 'rectangle' | 'ellipse' | 'circle' | 'triangle' | 'arrow',
                 x: (args as any).x as number | undefined,
                 y: (args as any).y as number | undefined,
                 width: (args as any).width as number | undefined,
@@ -229,8 +240,38 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               }
               break;
               
+            case 'arrangeShapes':
+              {
+                const arrangedIds = arrangeShapes(editor, {
+                  direction: (args as any).direction as 'horizontal' | 'vertical' | undefined,
+                  spacing: (args as any).spacing as number | undefined,
+                  alignment: (args as any).alignment as 'start' | 'center' | 'end' | undefined,
+                });
+                const count = arrangedIds.length;
+                const direction = (args as any).direction || 'horizontal';
+                const spacing = (args as any).spacing || 50;
+                addMessage('system', `✅ Arranged ${count} shape${count > 1 ? 's' : ''} ${direction}ly with ${spacing}px spacing`);
+              }
+              break;
+              
+            case 'createGrid':
+              {
+                const gridIds = createGrid(editor, {
+                  shapeType: (args as any).shapeType as 'rectangle' | 'ellipse' | undefined,
+                  rows: (args as any).rows as number | undefined,
+                  columns: (args as any).columns as number | undefined,
+                  spacing: (args as any).spacing as number | undefined,
+                  color: (args as any).color as string | undefined,
+                });
+                const rows = (args as any).rows || 3;
+                const columns = (args as any).columns || 3;
+                const shapeType = (args as any).shapeType || 'rectangle';
+                addMessage('system', `✅ Created ${rows}×${columns} grid of ${shapeType}s (${gridIds.length} shapes)`);
+              }
+              break;
+              
             default:
-              // For commands not yet implemented (PR #15-16)
+              // For commands not yet implemented (PR #16)
               addMessage(
                 'system',
                 `⏳ Command "${name}" recognized but not yet implemented. Coming in next phase!`
@@ -293,7 +334,7 @@ export function FloatingChat({ editor }: FloatingChatProps) {
     <div className="fixed bottom-6 right-6 z-50">
       {/* Chat Panel */}
       {isOpen && (
-        <div className="mb-4 w-[400px] h-[300px] bg-white rounded-2xl shadow-2xl flex flex-col border border-gray-200 animate-slide-up">
+        <div className="mb-4 w-[400px] h-[405px] bg-white rounded-2xl shadow-2xl flex flex-col border border-gray-200 animate-slide-up">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-blue-600">
             <div className="flex items-center gap-2">
@@ -320,8 +361,9 @@ export function FloatingChat({ editor }: FloatingChatProps) {
             </div>
           </div>
 
-          {/* Rate Limit Counter */}
-          <div className={`px-4 py-2 text-xs border-b ${
+          {/* Rate Limit Counter - DISABLED FOR DEVELOPMENT */}
+          {/* TODO: Re-enable for production */}
+          {/* <div className={`px-4 py-2 text-xs border-b ${
             rateLimit.remaining <= 2 ? 'bg-orange-50 text-orange-800 border-orange-200' : 'bg-gray-50 text-gray-600 border-gray-200'
           }`}>
             <div className="flex items-center justify-between">
@@ -334,6 +376,14 @@ export function FloatingChat({ editor }: FloatingChatProps) {
                 </span>
               )}
             </div>
+          </div> */}
+          
+          {/* Development Mode Badge */}
+          <div className="px-4 py-2 text-xs border-b bg-green-50 text-green-800 border-green-200">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">🔓 Development Mode</span>
+              <span>Rate limit disabled</span>
+            </div>
           </div>
 
           {/* Messages */}
@@ -343,7 +393,7 @@ export function FloatingChat({ editor }: FloatingChatProps) {
                 <div className="text-4xl mb-4">🥞</div>
                 <p className="text-sm font-medium mb-2">Flippy</p>
                 <p className="text-xs max-w-[280px]">
-                  It looks like you can&apos;t even draw a box with AI. Would you like help?
+                  It looks like you can&apos;t even draw a box without AI. Would you like help?
                 </p>
                 <div className="mt-4 text-xs text-gray-400">
                   <p className="mb-1">Try saying:</p>
@@ -385,14 +435,14 @@ export function FloatingChat({ editor }: FloatingChatProps) {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={rateLimit.isBlocked ? 'Rate limit reached...' : 'Ask AI to create or modify shapes...'}
-                disabled={isLoading || rateLimit.isBlocked}
+                placeholder="Ask AI to create or modify shapes..."
+                disabled={isLoading}
                 maxLength={500}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
               />
               <button
                 onClick={handleSend}
-                disabled={isLoading || !input.trim() || rateLimit.isBlocked}
+                disabled={isLoading || !input.trim()}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium text-sm"
               >
                 {isLoading ? '...' : 'Send'}
@@ -402,6 +452,16 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               {input.length}/500 characters · Press Enter to send
             </div>
           </div>
+        </div>
+      )}
+
+      {/* "Try Flippy!" Dialog - Only show when chat is closed */}
+      {!isOpen && (
+        <div className="absolute bottom-16 right-0 mb-2 bg-white px-4 py-2 rounded-lg shadow-lg border border-blue-200 animate-bounce">
+          <div className="text-sm font-medium text-blue-600">Try Flippy! 🥞</div>
+          {/* Speech bubble arrow */}
+          <div className="absolute bottom-[-8px] right-6 w-0 h-0 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-white"></div>
+          <div className="absolute bottom-[-9px] right-6 w-0 h-0 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-blue-200"></div>
         </div>
       )}
 

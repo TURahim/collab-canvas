@@ -16,7 +16,9 @@
     "@tldraw/tldraw": "^4.0.3",
     "firebase": "^12.4.0",
     "lodash": "^4.17.21",
+    "nanoid": "^5.1.6",
     "next": "15.5.5",
+    "openai": "^6.3.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "zod": "^4.1.12"

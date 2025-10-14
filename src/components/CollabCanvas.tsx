@@ -11,6 +11,7 @@ import { useShapes } from "../hooks/useShapes";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
 import UserList from "./UserList";
+import { FloatingChat } from "./FloatingChat";
 
 /**
  * CollabCanvas - Main collaborative whiteboard component
@@ -164,6 +165,9 @@ export default function CollabCanvas(): React.JSX.Element {
           </div>
         </div>
       )}
+      
+      {/* AI Chat Widget */}
+      <FloatingChat editor={editor} />
     </div>
   );
 }

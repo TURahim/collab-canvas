@@ -68,11 +68,14 @@ export function useCursors({
 
   // Throttled cursor update function (30Hz = every 33ms)
   const throttledUpdateCursor = useRef(
-    throttle((uid: string, cursor: { x: number; y: number }) => {
-      updateCursorPosition(uid, cursor).catch((err) => {
-        console.error("[useCursors] Failed to update cursor:", err);
-      });
-    }, 33)
+    throttle(
+      (uid: string, cursor: { x: number; y: number }): void => {
+        updateCursorPosition(uid, cursor).catch((err) => {
+          console.error("[useCursors] Failed to update cursor:", err);
+        });
+      },
+      33
+    )
   ).current;
 
 
@@ -89,27 +92,30 @@ export function useCursors({
     try {
       // Use tldraw's pointer event listener instead of DOM events
       // This integrates properly with tldraw's event system
-      const handlePointerMove = (info: PointerEventInfo): void => {
-        if (!info.point) {
+      const handlePointerEvent = (info: unknown): void => {
+        const evt = info as { name?: string; point?: { x: number; y: number } };
+        if (evt.name !== "move") {
+          return;
+        }
+        if (!evt.point) {
           return;
         }
         
         try {
           // The point is already in page coordinates from tldraw
-          throttledUpdateCursor(userId, info.point);
+          throttledUpdateCursor(userId, evt.point);
         } catch (err) {
           console.error("[useCursors] Error updating cursor:", err);
         }
       };
 
-      // Listen to pointer move via tldraw's event system
-      // Note: tldraw's event system types are complex, so we use const assertion
-      editor.on("pointer-move" as const, handlePointerMove);
+      // Listen to pointer events and handle moves (bypass strict event typing)
+      (editor as any).on("pointer", handlePointerEvent);
       setIsTracking(true);
 
       // Cleanup
       return (): void => {
-        editor.off("pointer-move" as const, handlePointerMove);
+        (editor as any).off("pointer", handlePointerEvent);
         setIsTracking(false);
       };
     } catch (err) {

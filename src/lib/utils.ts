@@ -153,13 +153,13 @@ export function formatRelativeTime(timestamp: number): string {
  * const debouncedSave = debounce(saveToFirebase, 300);
  * // Multiple rapid calls will only execute once after 300ms of inactivity
  */
-export function debounce<T extends (...args: unknown[]) => unknown>(
-  func: T,
+export function debounce<A extends unknown[]>(
+  func: (...args: A) => void,
   wait: number
-): (...args: Parameters<T>) => void {
+): (...args: A) => void {
   let timeoutId: NodeJS.Timeout | null = null;
   
-  return function debouncedFunction(...args: Parameters<T>): void {
+  return function debouncedFunction(...args: A): void {
     // Clear any existing timeout
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
@@ -185,13 +185,13 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
  * const throttledUpdate = throttle(updateCursor, 33);
  * // Will execute at most once every 33ms (30Hz)
  */
-export function throttle<T extends (...args: unknown[]) => unknown>(
-  func: T,
+export function throttle<A extends unknown[]>(
+  func: (...args: A) => void,
   wait: number
-): (...args: Parameters<T>) => void {
+): (...args: A) => void {
   let isThrottled = false;
   
-  return function throttledFunction(...args: Parameters<T>): void {
+  return function throttledFunction(...args: A): void {
     if (!isThrottled) {
       func(...args);
       isThrottled = true;

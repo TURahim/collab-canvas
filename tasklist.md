@@ -724,7 +724,7 @@ npm run test:coverage
 ✅ Support for 5+ concurrent users  
 
 ### Known Limitations:
-⚠️ Images disappear on refresh (asset persistence not in MVP)  
+⚠️ Uploaded Images disappear on refresh (asset persistence not in MVP)  
 ⚠️ Single default room (multi-room support planned)  
 ⚠️ No mobile optimization yet  
 

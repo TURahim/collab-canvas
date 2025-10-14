@@ -122,11 +122,10 @@ export default function CollabCanvas() {
     <div className="fixed inset-0">
       <Tldraw 
         onMount={handleEditorMount}
-        // Optional: Add license key if you have one
-        // This removes the watermark on paid tiers
-        {...(process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY && {
-          licenseKey: process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY
-        })}
+        // Add license key when you get one from tldraw
+        // Free licenses available for open-source/personal projects
+        // Request at: https://tldraw.dev/community
+        licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY || undefined}
       />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList

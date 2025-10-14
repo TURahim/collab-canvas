@@ -13,6 +13,9 @@ import { useCallback, useState, useEffect } from "react";
 export default function CollabCanvas() {
   const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
+  
+  // tldraw license key - get from environment variables
+  const licenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
   /**
    * Debug: Check if Tldraw component is remounting
@@ -122,10 +125,7 @@ export default function CollabCanvas() {
     <div className="fixed inset-0">
       <Tldraw 
         onMount={handleEditorMount}
-        // Add license key when you get one from tldraw
-        // Free licenses available for open-source/personal projects
-        // Request at: https://tldraw.dev/community
-        licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY || undefined}
+        licenseKey={licenseKey}
       />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList

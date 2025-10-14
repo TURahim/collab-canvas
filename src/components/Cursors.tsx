@@ -96,7 +96,7 @@ export default function Cursors({ editor, remoteCursors }: CursorsProps) {
 
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-50"
+      className="pointer-events-none fixed inset-0 z-[100]"
       style={{ position: "fixed" }}
     >
       {Object.entries(cursorPositions).map(([userId, cursor]) => (

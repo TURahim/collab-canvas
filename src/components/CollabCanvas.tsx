@@ -125,7 +125,7 @@ export default function CollabCanvas() {
       />
       
       {/* Status indicators */}
-      <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-2">
+      <div className="fixed bottom-4 left-4 z-10 flex flex-col gap-2 pointer-events-none">
         {isTracking && (
           <div className="rounded-lg bg-green-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
             🟢 Cursor tracking active

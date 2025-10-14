@@ -9,6 +9,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
 import AuthModal from "./AuthModal";
+import LoginModal from "./LoginModal";
 import Cursors from "./Cursors";
 import UserList from "./UserList";
 import { FloatingChat } from "./FloatingChat";
@@ -27,7 +28,7 @@ import { FloatingChat } from "./FloatingChat";
  * @returns Collaborative canvas interface
  */
 export default function CollabCanvas(): React.JSX.Element {
-  const { user, loading, error, setDisplayName } = useAuth();
+  const { user, loading, error, setDisplayName, signInWithGoogle, signOutUser } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
 
   /**
@@ -135,6 +136,13 @@ export default function CollabCanvas(): React.JSX.Element {
     );
   }
 
+  // Show LoginModal if not authenticated
+  if (!user && !loading && !error) {
+    return (
+      <LoginModal onSignIn={signInWithGoogle} loading={loading} error={null} />
+    );
+  }
+
   // Show AuthModal if user doesn't have a display name
   if (user && !user.displayName) {
     return (
@@ -149,6 +157,21 @@ export default function CollabCanvas(): React.JSX.Element {
   // User is authenticated and has a display name - show canvas
   return (
     <div className="fixed inset-0">
+      {/* Simple top-right user menu */}
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+        {user && (
+          <>
+            <span className="rounded bg-gray-800/80 px-2 py-1 text-xs text-white">{user.displayName ?? 'Anonymous'}</span>
+            <button
+              onClick={signOutUser}
+              className="rounded bg-white/90 px-2 py-1 text-xs text-gray-800 shadow hover:bg-white"
+            >
+              Sign out
+            </button>
+          </>
+        )}
+      </div>
+
       <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList

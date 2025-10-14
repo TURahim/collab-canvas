@@ -4,7 +4,7 @@
  */
 
 import type { User as FirebaseUser } from "firebase/auth";
-import { onAuthStateChanged, signInAnonymously, updateProfile } from "firebase/auth";
+import { onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { onDisconnect, ref, serverTimestamp, set } from "firebase/database";
 import { useEffect, useState } from "react";
 
@@ -17,6 +17,8 @@ import { generateColorFromString } from "../lib/utils";
  */
 interface UseAuthReturn extends AuthState {
   setDisplayName: (name: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signOutUser: () => Promise<void>;
 }
 
 /**
@@ -57,9 +59,6 @@ export function useAuth(): UseAuthReturn {
           if (firebaseUser.displayName) {
             await writeUserToDatabase(userData);
           }
-        } else {
-          // No user signed in, trigger anonymous sign-in
-          await signInAnonymously(auth);
         }
       } catch (err) {
         console.error("[useAuth] Authentication error:", err);
@@ -144,7 +143,36 @@ export function useAuth(): UseAuthReturn {
     }
   };
 
-  return { user, loading, error, setDisplayName };
+  const signInWithGoogle = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error("Google sign-in failed");
+      setError(error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOutUser = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      await signOut(auth);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error("Sign out failed");
+      setError(error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { user, loading, error, setDisplayName, signInWithGoogle, signOutUser };
 }
 
 /**

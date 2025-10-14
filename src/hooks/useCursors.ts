@@ -37,13 +37,6 @@ interface UseCursorsReturn {
 }
 
 /**
- * tldraw pointer event info structure
- */
-interface PointerEventInfo {
-  point?: { x: number; y: number };
-}
-
-/**
  * Hook to track and sync cursor positions across users
  * - Tracks local mouse movement and sends to Realtime DB (30Hz)
  * - Listens to other users' cursor positions
@@ -90,30 +83,27 @@ export function useCursors({
     }
 
     try {
-      // Use tldraw's pointer event listener instead of DOM events
-      // This integrates properly with tldraw's event system
-      const handlePointerMove = (info: PointerEventInfo): void => {
-        if (!info.point) {
-          return;
-        }
-        
+      // In tldraw v4, we need to use DOM events on the container
+      // instead of tldraw's internal event system (which changed in v4)
+      const container = editor.getContainer();
+      
+      const handlePointerMove = (e: PointerEvent): void => {
         try {
-          // The point is already in page coordinates from tldraw
-          throttledUpdateCursor(userId, info.point);
+          // Convert screen coordinates to page coordinates using tldraw's methods
+          const point = editor.screenToPage({ x: e.clientX, y: e.clientY });
+          throttledUpdateCursor(userId, { x: point.x, y: point.y });
         } catch (err) {
           console.error("[useCursors] Error updating cursor:", err);
         }
       };
 
-      // Listen to pointer move events via tldraw's event system
-      // Note: tldraw v2+ uses "pointermove" (no hyphen), not "pointer-move"
-      // Using type assertion as tldraw's event types don't expose this event in TLEventMap
-      (editor as any).on("pointermove", handlePointerMove);
+      // Listen to pointer move events on the tldraw container
+      container.addEventListener('pointermove', handlePointerMove);
       setIsTracking(true);
 
       // Cleanup
       return (): void => {
-        (editor as any).off("pointermove", handlePointerMove);
+        container.removeEventListener('pointermove', handlePointerMove);
         setIsTracking(false);
       };
     } catch (err) {

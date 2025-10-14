@@ -109,7 +109,7 @@ export function getEditorShapes(editor: Editor): TldrawShape[] {
       x: shape.x,
       y: shape.y,
       rotation: shape.rotation,
-      props: shape.props,
+      props: shape.props as Record<string, unknown> | undefined,
     }))
     .filter(isValidShape);
 }

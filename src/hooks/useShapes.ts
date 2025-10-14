@@ -49,7 +49,8 @@ export function useShapes({
    * 300ms delay after last change to batch rapid updates
    */
   const debouncedWriteShape = useRef(
-    debounce(async (shape: TLShape, uid: string, room: string) => {
+    debounce(async (...args: unknown[]) => {
+      const [shape, uid, room] = args as [TLShape, string, string];
       try {
         await writeShapeToFirestore(room, shape, uid);
       } catch (err) {
@@ -57,7 +58,7 @@ export function useShapes({
         setError(err as Error);
       }
     }, 300)
-  ).current;
+  ).current as (shape: TLShape, uid: string, room: string) => void;
 
   /**
    * Handle shape changes from tldraw editor

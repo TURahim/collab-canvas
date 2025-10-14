@@ -53,12 +53,13 @@ export function useCursors({
 
   // Throttled cursor update function (30Hz = every 33ms)
   const throttledUpdateCursor = useRef(
-    throttle((userId: string, cursor: { x: number; y: number }) => {
+    throttle((...args: unknown[]) => {
+      const [userId, cursor] = args as [string, { x: number; y: number }];
       updateCursorPosition(userId, cursor).catch((err) => {
         console.error("Failed to update cursor:", err);
       });
     }, 33)
-  ).current;
+  ).current as (userId: string, cursor: { x: number; y: number }) => void;
 
   /**
    * Handle pointer move events from tldraw

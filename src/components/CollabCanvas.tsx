@@ -27,7 +27,7 @@ import { FloatingChat } from "./FloatingChat";
  * @returns Collaborative canvas interface
  */
 export default function CollabCanvas(): React.JSX.Element {
-  const { user, loading, error, setDisplayName, signOutUser } = useAuth();
+  const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
 
   /**
@@ -94,18 +94,6 @@ export default function CollabCanvas(): React.JSX.Element {
     }
   }, [shapeError]);
 
-  /**
-   * Handle logout with proper error handling
-   */
-  const handleLogout = async (): Promise<void> => {
-    try {
-      await signOutUser();
-    } catch (err) {
-      console.error("[CollabCanvas] Logout failed:", err);
-      // Error is already handled in useAuth
-    }
-  };
-
   // Show error state if Firebase is not configured
   if (error && !user) {
     return (
@@ -170,19 +158,6 @@ export default function CollabCanvas(): React.JSX.Element {
         />
       </div>
 
-      {/* Top-right user menu */}
-      {user && (
-        <div className="fixed right-4 top-4 z-20 flex items-center gap-3 rounded-lg bg-white/90 px-3 py-2 shadow-md backdrop-blur">
-          <span className="text-sm font-medium text-gray-800">{user.displayName ?? 'Signed in'}</span>
-          <button
-            onClick={() => void handleLogout()}
-            className="rounded-md border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 transition hover:bg-gray-100"
-            aria-label="Sign out"
-          >
-            Logout
-          </button>
-        </div>
-      )}
       <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList

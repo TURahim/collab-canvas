@@ -1130,12 +1130,15 @@ export function createCard(
 }
 
 /**
- * Create a navigation bar
+ * Create a professional navigation bar
  * 
- * Creates 9-10 shapes:
- * 1. Nav bar background (800x60, dark color)
- * 2. Logo text (left side)
- * 3-10. 4 menu item buttons + 4 text labels
+ * Creates 6 shapes:
+ * 1. Nav bar background (900x70, modern gradient-like appearance)
+ * 2. Logo text (left side, bold and prominent)
+ * 3. Home menu item text (right-aligned)
+ * 4. About menu item text (right-aligned)
+ * 5. Services menu item text (right-aligned)
+ * 6. Contact menu item text (right-aligned)
  * 
  * @param editor - tldraw editor instance
  * @param params - Navigation bar parameters
@@ -1143,8 +1146,8 @@ export function createCard(
  */
 export interface CreateNavigationBarParams {
   menuItems?: string[]; // Array of menu item labels (default: ['Home', 'About', 'Services', 'Contact'])
-  logoText?: string; // Logo text (default: "Logo")
-  color?: string; // Nav bar background color (default: "black")
+  logoText?: string; // Logo text (default: "JellyBoard")
+  color?: string; // Nav bar background color (default: "blue")
 }
 
 export function createNavigationBar(
@@ -1157,28 +1160,24 @@ export function createNavigationBar(
 
   const {
     menuItems = ['Home', 'About', 'Services', 'Contact'],
-    logoText = 'Logo',
-    color = 'black',
+    logoText = 'JellyBoard',
+    color = 'blue',
   } = params;
 
-  console.log('[createNavigationBar] Creating navigation bar with menu items:', menuItems);
+  console.log('[createNavigationBar] Creating professional navigation bar with menu items:', menuItems);
 
   const center = getViewportCenter(editor);
   
-  // Navigation bar dimensions
-  const navWidth = 800;
-  const navHeight = 60;
-  const buttonWidth = 100;
-  const buttonHeight = 35;
-  const menuItemSpacing = 20;
-
-  // Starting position for menu items (right side of nav bar)
-  const totalMenuWidth = menuItems.length * buttonWidth + (menuItems.length - 1) * menuItemSpacing;
-  const menuStartX = center.x + navWidth / 2 - totalMenuWidth / 2 - 50;
+  // Professional navigation bar dimensions
+  const navWidth = 900;
+  const navHeight = 70;
+  const logoLeftMargin = 60;
+  const menuRightMargin = 60;
+  const menuItemSpacing = 50;
 
   const shapes: ShapeDefinition[] = [];
 
-  // 1. Nav bar background (800x60, dark color)
+  // 1. Nav bar background (900x70, modern blue)
   shapes.push({
     shapeType: 'rectangle',
     x: center.x,
@@ -1188,49 +1187,39 @@ export function createNavigationBar(
     color: mapToTldrawColor(color),
   });
 
-  // 2. Logo text (left side)
+  // 2. Logo text (left side, bold and prominent)
   shapes.push({
     shapeType: 'text',
-    x: center.x - navWidth / 2 + 80,
+    x: center.x - navWidth / 2 + logoLeftMargin + 10,
     y: center.y,
-    width: 120,
+    width: 200,
     height: 40,
     text: logoText,
-    fontSize: 24,
-    color: 'white',
+    fontSize: 28,
+    color: 'black',
   });
 
-  // 3-10. Create menu items (buttons + text)
+  // 3-6. Create menu items (text only, no buttons for cleaner look)
   menuItems.forEach((item, index) => {
-    const menuItemX = menuStartX + index * (buttonWidth + menuItemSpacing);
+    const menuItemX = center.x + navWidth / 2 - menuRightMargin - (menuItems.length - 1 - index) * (120 + menuItemSpacing);
     
-    // Button background
-    shapes.push({
-      shapeType: 'rectangle',
-      x: menuItemX,
-      y: center.y,
-      width: buttonWidth,
-      height: buttonHeight,
-      color: 'grey',
-    });
-
-    // Button text
+    // Menu item text (clean, no background)
     shapes.push({
       shapeType: 'text',
       x: menuItemX,
       y: center.y,
-      width: buttonWidth - 10,
+      width: 120,
       height: 30,
       text: item,
-      fontSize: 16,
-      color: 'white',
+      fontSize: 18,
+      color: 'black',
     });
   });
 
   // Create all shapes
   const createdShapeIds = createMultiShapeLayout(editor, shapes);
 
-  console.log(`[createNavigationBar] Created ${createdShapeIds.length} shapes (nav bar + logo + ${menuItems.length * 2} menu items)`);
+  console.log(`[createNavigationBar] Created ${createdShapeIds.length} shapes (nav bar + logo + ${menuItems.length} menu items)`);
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {

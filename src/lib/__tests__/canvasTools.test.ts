@@ -1044,10 +1044,10 @@ describe('canvasTools', () => {
     it('should create correct number of shapes for navigation bar with default menu items', () => {
       const result = createNavigationBar(mockEditor);
 
-      // 5 geo shapes (nav + 4 buttons) + 5 text shapes (logo + 4 menu texts) = 10 total
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(5);
+      // 1 geo shape (nav background) + 5 text shapes (logo + 4 menu texts) = 6 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(1);
       expect(mockEditor.createShapes).toHaveBeenCalledTimes(5);
-      expect(result).toHaveLength(10);
+      expect(result).toHaveLength(6);
     });
 
     it('should use default menu items when not provided', () => {
@@ -1064,9 +1064,9 @@ describe('canvasTools', () => {
       const customMenuItems = ['Dashboard', 'Profile', 'Settings'];
       const result = createNavigationBar(mockEditor, { menuItems: customMenuItems });
 
-      // 4 geo shapes (nav + 3 buttons) + 4 text shapes (logo + 3 menu texts) = 8 total
-      expect(mockEditor.createShape).toHaveBeenCalledTimes(4);
-      expect(result).toHaveLength(8);
+      // 1 geo shape (nav background) + 4 text shapes (logo + 3 menu texts) = 5 total
+      expect(mockEditor.createShape).toHaveBeenCalledTimes(1);
+      expect(result).toHaveLength(5);
       expect(mockEditor.createShapes).toHaveBeenCalledTimes(4);
     });
 
@@ -1096,8 +1096,8 @@ describe('canvasTools', () => {
       const navBarCall = calls[0][0];
       
       expect(navBarCall.type).toBe('geo');
-      expect(navBarCall.props.w).toBe(800);
-      expect(navBarCall.props.h).toBe(60);
+      expect(navBarCall.props.w).toBe(900);
+      expect(navBarCall.props.h).toBe(70);
     });
 
     it('should create logo on the left side', () => {
@@ -1107,25 +1107,25 @@ describe('canvasTools', () => {
       const logoCall = textCalls[0][0][0]; // First text shape (logo)
       
       expect(logoCall.type).toBe('text');
-      expect(logoCall.props.richText.text).toBe('Logo');
-      expect(logoCall.props.size).toBe('m'); // 24px maps to m (≤24)
-      expect(logoCall.props.color).toBe('white');
+      expect(logoCall.props.richText.text).toBe('JellyBoard');
+      expect(logoCall.props.size).toBe('l'); // 28px maps to l (≤32)
+      expect(logoCall.props.color).toBe('black');
     });
 
-    it('should create menu buttons with correct dimensions', () => {
+    it('should create menu items as text only (no buttons)', () => {
       createNavigationBar(mockEditor);
 
-      const geoCalls = (mockEditor.createShape as jest.Mock).mock.calls;
-      // First geo shape is nav background, then menu buttons
-      const firstButton = geoCalls[1][0];
+      const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
+      // First text shape is logo, then menu items
+      const firstMenuItem = textCalls[1][0][0]; // Second text shape (first menu item)
       
-      expect(firstButton.type).toBe('geo');
-      expect(firstButton.props.w).toBe(100);
-      expect(firstButton.props.h).toBe(35);
-      expect(firstButton.props.color).toBe('grey');
+      expect(firstMenuItem.type).toBe('text');
+      expect(firstMenuItem.props.richText.text).toBe('Home');
+      expect(firstMenuItem.props.size).toBe('m'); // 18px maps to m (≤24)
+      expect(firstMenuItem.props.color).toBe('black');
     });
 
-    it('should create menu item text with white color', () => {
+    it('should create menu item text with black color', () => {
       createNavigationBar(mockEditor);
 
       const textCalls = (mockEditor.createShapes as jest.Mock).mock.calls;
@@ -1133,8 +1133,8 @@ describe('canvasTools', () => {
       const firstMenuText = textCalls[1][0][0]; // Second text shape (first menu item)
       
       expect(firstMenuText.type).toBe('text');
-      expect(firstMenuText.props.color).toBe('white');
-      expect(firstMenuText.props.size).toBe('s'); // 16px maps to s (≤16)
+      expect(firstMenuText.props.color).toBe('black');
+      expect(firstMenuText.props.size).toBe('m'); // 18px maps to m (≤24)
     });
 
     it('should select all created shapes', () => {

@@ -127,7 +127,32 @@ export function useCursors({
             
             // Filter out current user
             const { [userId]: _currentUser, ...others } = users;
-            setRemoteCursors(others);
+            
+            // Only update if cursors actually changed (prevent unnecessary re-renders)
+            setRemoteCursors((prev) => {
+              const prevKeys = Object.keys(prev).sort().join(',');
+              const newKeys = Object.keys(others).sort().join(',');
+              
+              // Quick check: if user list changed, update
+              if (prevKeys !== newKeys) {
+                return others;
+              }
+              
+              // Deep check: if cursor positions changed, update
+              for (const [uid, user] of Object.entries(others)) {
+                const prevUser = prev[uid];
+                if (!prevUser || 
+                    prevUser.cursor?.x !== user.cursor?.x || 
+                    prevUser.cursor?.y !== user.cursor?.y ||
+                    prevUser.name !== user.name ||
+                    prevUser.color !== user.color) {
+                  return others;
+                }
+              }
+              
+              // No changes, keep previous reference
+              return prev;
+            });
           });
         }
       } catch (err) {

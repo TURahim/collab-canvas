@@ -13,9 +13,6 @@ import { useCallback, useState, useEffect } from "react";
 export default function CollabCanvas() {
   const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
-  
-  // tldraw license key - get from environment variables
-  const licenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
   /**
    * Debug: Check if Tldraw component is remounting
@@ -123,10 +120,7 @@ export default function CollabCanvas() {
   // User is authenticated and has a display name - show canvas
   return (
     <div className="fixed inset-0">
-      <Tldraw 
-        onMount={handleEditorMount}
-        licenseKey={licenseKey}
-      />
+      <Tldraw onMount={handleEditorMount} />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList
         currentUserId={user?.uid || null}
@@ -150,3 +144,4 @@ export default function CollabCanvas() {
     </div>
   );
 }
+

@@ -121,6 +121,26 @@ This document contains critical technical knowledge about specific libraries and
 
 ---
 
+### Geo Shape Types
+
+**Problem:** tldraw has specific names for geo shapes that don't always match user expectations.
+
+**Valid Geo Shape Types:**
+`"cloud"`, `"rectangle"`, `"ellipse"`, `"triangle"`, `"diamond"`, `"pentagon"`, `"hexagon"`, `"octagon"`, `"star"`, `"rhombus"`, `"rhombus-2"`, `"oval"`, `"trapezoid"`, `"arrow-right"`, `"arrow-left"`, `"arrow-up"`, `"arrow-down"`, `"x-box"`, `"check-box"`, `"heart"`
+
+**Common Aliases (mapped in our code):**
+- `"circle"` → `"ellipse"` ⚠️ **Critical:** tldraw uses `"ellipse"` for circles!
+- `"square"` → `"rectangle"` (square is rectangle with equal width/height)
+
+**Implementation:**
+- Use `mapToTldrawGeoType()` helper (in `canvasTools.ts`) to convert user-friendly names
+- Applied in `createShape()` and `createGrid()` functions
+
+**Error if wrong:**
+- `At shape(type = geo).props.geo: Expected "cloud" or "rectangle" or "ellipse"... got circle` → Use `"ellipse"` instead of `"circle"`
+
+---
+
 ### Color System
 
 **Problem:** tldraw only accepts 13 specific color names (not hex codes or arbitrary names).
@@ -233,6 +253,7 @@ transformIgnorePatterns: [
 
 ## 🔄 Update Log
 
+- **2025-10-14 (Update 6):** Fixed geo shape type mapping - tldraw uses `"ellipse"` not `"circle"`! Added `mapToTldrawGeoType()` helper to handle common aliases (circle→ellipse, square→rectangle). Applied in `createShape()` and `createGrid()`. Added complete list of valid geo shape types.
 - **2025-10-14 (Update 5):** Fixed type assertion hack - `as unknown as TLShapeId` compiles but doesn't work at runtime. The Editor instance returned doesn't have ID properties. ALL shape creation (geo AND text) must use `createShapeId()` pattern. Fixed in `createMultiShapeLayout`, `createShape`, and `createGrid`.
 - **2025-10-14 (Update 4):** Fixed shape ID retrieval issue - `editor.createShapes()` returns Editor (for chaining), not IDs. Must use `createShapeId()` to generate IDs first and pass them explicitly in shape definitions.
 - **2025-10-14 (Update 3):** Fixed text shape height property issue - text shapes DON'T accept `h` property (auto-size vertically based on content). Added comprehensive explanation of text vs geo shape differences and height management.

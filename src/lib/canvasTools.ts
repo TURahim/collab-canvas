@@ -96,6 +96,22 @@ function mapFontSize(fontSize: number): 's' | 'm' | 'l' | 'xl' {
 }
 
 /**
+ * Maps user-friendly shape type names to tldraw geo shape types
+ * Handles common aliases like "circle" -> "ellipse"
+ * 
+ * @param shapeType - User-friendly shape type name
+ * @returns Tldraw geo shape type
+ */
+function mapToTldrawGeoType(shapeType: string): string {
+  const mapping: Record<string, string> = {
+    'circle': 'ellipse',  // tldraw uses 'ellipse' for circles
+    'square': 'rectangle', // square is just a rectangle with equal sides
+  };
+  
+  return mapping[shapeType.toLowerCase()] || shapeType;
+}
+
+/**
  * Gets the center point of the current viewport
  * Used to position shapes in the middle of the user's view
  * 
@@ -241,15 +257,15 @@ export function createShape(
       x: x - width / 2,
       y: y - height / 2,
       props: {
-        geo: type,
+        geo: mapToTldrawGeoType(type),
         w: width,
         h: height,
         color: mapToTldrawColor(color),
         fill: 'solid',
       },
     });
-    editor.select(shapeId);
-    return shapeId;
+  editor.select(shapeId);
+  return shapeId;
   }
 }
 
@@ -294,11 +310,11 @@ export function createTextShape(
   const shapeId = createShapeId();
   editor.createShapes([
     {
-      id: shapeId,
-      type: 'text',
+    id: shapeId,
+    type: 'text',
       x: x - 100,
       y: y - 25,
-      props: {
+    props: {
         richText: toRichText(text),
         w: 200,
         size: mapFontSize(fontSize),
@@ -566,7 +582,7 @@ export function createGrid(
         x,
         y,
         props: {
-          geo: shapeType,
+          geo: mapToTldrawGeoType(shapeType),
           w: cellWidth,
           h: cellHeight,
           color: mapToTldrawColor(color),

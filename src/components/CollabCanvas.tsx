@@ -12,6 +12,7 @@ import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
 import UserList from "./UserList";
 import { FloatingChat } from "./FloatingChat";
+import ExportDialog from "./ExportDialog";
 
 /**
  * CollabCanvas - Main collaborative whiteboard component
@@ -29,6 +30,7 @@ import { FloatingChat } from "./FloatingChat";
 export default function CollabCanvas(): React.JSX.Element {
   const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
 
   /**
    * Debug: Check if Tldraw component is remounting and verify license key
@@ -177,6 +179,26 @@ export default function CollabCanvas(): React.JSX.Element {
       
       {/* AI Chat Widget */}
       <FloatingChat editor={editor} />
+
+      {/* Export Button - Floating in bottom-right */}
+      <button
+        onClick={() => setShowExportDialog(true)}
+        className="fixed bottom-4 right-4 z-10 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700 transition-colors"
+        title="Export canvas (Ctrl+E)"
+        aria-label="Export canvas"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Export
+      </button>
+
+      {/* Export Dialog */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        editor={editor}
+      />
     </div>
   );
 }

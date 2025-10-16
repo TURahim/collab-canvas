@@ -4,14 +4,19 @@ import type { Editor } from "@tldraw/tldraw";
 import { Tldraw } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useAuth } from "../hooks/useAuth";
 import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
+import { getOrCreateDefaultRoom, getRoomMetadata } from "../lib/roomManagement";
+import type { RoomMetadata } from "../types/room";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
 import UserList from "./UserList";
 import { FloatingChat } from "./FloatingChat";
+import RoomHeader from "./RoomHeader";
+import RoomSettings from "./RoomSettings";
 
 /**
  * CollabCanvas - Main collaborative whiteboard component
@@ -27,8 +32,12 @@ import { FloatingChat } from "./FloatingChat";
  * @returns Collaborative canvas interface
  */
 export default function CollabCanvas(): React.JSX.Element {
+  const router = useRouter();
   const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [roomId, setRoomId] = useState<string>('default');
+  const [roomMetadata, setRoomMetadata] = useState<RoomMetadata | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   /**
    * Debug: Check if Tldraw component is remounting and verify license key
@@ -50,6 +59,33 @@ export default function CollabCanvas(): React.JSX.Element {
       console.log('[CollabCanvas] Component unmounted');
     };
   }, []);
+
+  /**
+   * Initialize room - get or create default room for user
+   */
+  useEffect(() => {
+    const initializeRoom = async (): Promise<void> => {
+      if (user && user.displayName) {
+        try {
+          const defaultRoomId = await getOrCreateDefaultRoom(user.uid, user.displayName);
+          setRoomId(defaultRoomId);
+
+          const metadata = await getRoomMetadata(defaultRoomId);
+          setRoomMetadata(metadata);
+
+          console.log('[CollabCanvas] Room initialized:', {
+            roomId: defaultRoomId,
+            roomName: metadata?.name,
+            isOwner: metadata?.owner === user.uid,
+          });
+        } catch (err) {
+          console.error('[CollabCanvas] Error initializing room:', err);
+        }
+      }
+    };
+
+    void initializeRoom();
+  }, [user]);
 
   /**
    * Editor mount handler - called when tldraw editor is initialized
@@ -77,8 +113,8 @@ export default function CollabCanvas(): React.JSX.Element {
   const { isSyncing, error: shapeError } = useShapes({
     editor,
     userId: user?.uid ?? null,
-    roomId: "default",
-    enabled: !!user && !!user.displayName,
+    roomId,
+    enabled: !!user && !!user.displayName && !!roomId,
   });
 
   // Log errors (moved to useEffect to prevent re-render spam)
@@ -149,34 +185,53 @@ export default function CollabCanvas(): React.JSX.Element {
   // User is authenticated and has a display name - show canvas
   return (
     <div className="fixed inset-0">
-      {/* Logo at center top */}
-      <div className="fixed left-1/2 top-4 z-20 -translate-x-1/2 transform">
-        <img 
-          src="/JellyBoardBanner.png" 
-          alt="JellyBoard Logo" 
-          className="h-12 w-auto drop-shadow-md"
+      {/* Room Header - Added by PR #5 */}
+      {roomMetadata && (
+        <RoomHeader
+          roomId={roomId}
+          roomName={roomMetadata.name}
+          isOwner={roomMetadata.owner === user?.uid}
+          userCount={roomMetadata.memberCount}
+          onSettingsClick={() => setShowSettings(true)}
+          onExitClick={() => router.push('/')}
         />
-      </div>
-
-      <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
-      <Cursors editor={editor} remoteCursors={remoteCursors} />
-      <UserList
-        currentUserId={user?.uid ?? null}
-        currentUserName={user?.displayName ?? null}
-        currentUserColor={user?.color ?? "#999999"}
-      />
-      
-      {/* Status indicators */}
-      {isSyncing && (
-        <div className="fixed bottom-4 left-4 z-10 pointer-events-none">
-          <div className="rounded-lg bg-blue-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
-            🔄 Syncing shapes...
-          </div>
-        </div>
       )}
-      
-      {/* AI Chat Widget */}
-      <FloatingChat editor={editor} />
+
+      {/* Room Settings Modal - Added by PR #5 */}
+      {showSettings && user && roomMetadata && (
+        <RoomSettings
+          roomId={roomId}
+          currentUserId={user.uid}
+          onClose={() => setShowSettings(false)}
+          onRoomDeleted={() => router.push('/')}
+          onRoomUpdated={(name) => {
+            setRoomMetadata({ ...roomMetadata, name });
+          }}
+        />
+      )}
+
+      {/* Canvas container with top padding for header */}
+      <div className={roomMetadata ? "fixed inset-0 pt-14 md:pt-16" : "fixed inset-0"}>
+        <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
+        <Cursors editor={editor} remoteCursors={remoteCursors} />
+        <UserList
+          currentUserId={user?.uid ?? null}
+          currentUserName={user?.displayName ?? null}
+          currentUserColor={user?.color ?? "#999999"}
+        />
+        
+        {/* Status indicators */}
+        {isSyncing && (
+          <div className="fixed bottom-4 left-4 z-10 pointer-events-none">
+            <div className="rounded-lg bg-blue-500 px-3 py-2 text-xs font-medium text-white shadow-lg">
+              🔄 Syncing shapes...
+            </div>
+          </div>
+        )}
+        
+        {/* AI Chat Widget */}
+        <FloatingChat editor={editor} />
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
+import { collectionGroup, getDocs, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useAuth } from "../../hooks/useAuth";
 import { createRoom } from "../../lib/roomManagement";
@@ -43,30 +43,26 @@ export default function RoomsPage(): React.JSX.Element {
         setLoading(true);
         setError(null);
 
-        // Query for rooms where user is owner or member
-        const roomsRef = collection(db, "rooms");
+        // Query for rooms using collectionGroup (queries across all metadata subcollections)
+        // Room structure: rooms/{roomId}/metadata/info
         
         // Get rooms owned by user
         const ownedQuery = query(
-          roomsRef,
+          collectionGroup(db, "metadata"),
           where("owner", "==", user.uid),
-          orderBy("updatedAt", "desc"),
           limit(50)
         );
         
-        // Note: Firestore doesn't support OR queries directly, so we need to fetch separately
-        // and merge results. For MVP, we'll just show owned rooms + public rooms
+        // Get public rooms
+        const publicQuery = query(
+          collectionGroup(db, "metadata"),
+          where("isPublic", "==", true),
+          limit(20)
+        );
         
         const [ownedSnapshot, publicSnapshot] = await Promise.all([
           getDocs(ownedQuery).catch(() => ({ docs: [] })),
-          getDocs(
-            query(
-              roomsRef,
-              where("isPublic", "==", true),
-              orderBy("updatedAt", "desc"),
-              limit(20)
-            )
-          ).catch(() => ({ docs: [] })),
+          getDocs(publicQuery).catch(() => ({ docs: [] })),
         ]);
 
         // Combine and deduplicate

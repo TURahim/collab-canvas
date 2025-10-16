@@ -17,6 +17,7 @@ import UserList from "./UserList";
 import { FloatingChat } from "./FloatingChat";
 import RoomHeader from "./RoomHeader";
 import RoomSettings from "./RoomSettings";
+import ExportDialog from "./ExportDialog";
 
 /**
  * CollabCanvas - Main collaborative whiteboard component
@@ -44,6 +45,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
   const [roomId, setRoomId] = useState<string>(propRoomId || 'default');
   const [roomMetadata, setRoomMetadata] = useState<RoomMetadata | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
 
   /**
    * Debug: Check if Tldraw component is remounting and verify license key
@@ -238,6 +240,26 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
         {/* AI Chat Widget */}
         <FloatingChat editor={editor} />
       </div>
+
+      {/* Export Button - Floating in bottom-right - Added by PR #6 */}
+      <button
+        onClick={() => setShowExportDialog(true)}
+        className="fixed bottom-4 right-4 z-10 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700 transition-colors"
+        title="Export canvas (Ctrl+E)"
+        aria-label="Export canvas"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Export
+      </button>
+
+      {/* Export Dialog - Added by PR #6 */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        editor={editor}
+      />
     </div>
   );
 }

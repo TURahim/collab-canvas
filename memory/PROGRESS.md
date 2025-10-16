@@ -1,7 +1,7 @@
 # PROGRESS LOG - CollabCanvas
 
 **Project Start:** October 2025  
-**Last Updated:** October 15, 2025 (Evening)
+**Last Updated:** October 16, 2025
 
 ---
 
@@ -90,6 +90,37 @@
 - FINAL_PERMISSION_FIX.md
 
 **Files Modified:** 14 files, 1,510+ lines
+
+---
+
+### ✅ Milestone 4.5: Multi-Room Routing Foundation (October 16, 2025)
+**Completed:** October 16, 2025
+
+**Achievements:**
+- Implemented PR #1 (Multi-Room Routing) - was missing from original implementation
+- Created room list page at `/rooms` with grid layout
+- Created individual room pages at `/room/[roomId]`  
+- Built room creation flow with validation
+- Added path utilities (room ID generation, validation)
+- Deployed Firestore collection group rules
+- Created composite indexes for room queries
+- Updated home page to redirect to `/rooms`
+- Updated CollabCanvas to use roomId from props
+- Resolved "aspirational vs reality" gap in planning docs
+
+**Tests Added:** 21 tests (path utilities, useRoomId hook)
+
+**Files Created:**
+- `src/lib/paths.ts`
+- `src/hooks/useRoomId.ts`
+- `src/app/rooms/page.tsx`
+- `src/app/room/[roomId]/page.tsx`
+- Test files for paths and useRoomId
+
+**Firestore Updates:**
+- Collection group rules for metadata queries
+- Composite indexes for owner and isPublic fields
+- Index build time: ~3 minutes
 
 ---
 

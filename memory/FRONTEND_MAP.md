@@ -12,33 +12,105 @@ App Layout (app/layout.tsx)
 ├─ ErrorBoundary
 │  └─ {children}
 │
-└─ Main Page (app/page.tsx)
-   └─ CollabCanvas
+├─ Home Page (app/page.tsx) → Redirects to /rooms
+│
+├─ Rooms Page (app/rooms/page.tsx) ⭐ NEW
+│  ├─ AuthModal (conditional)
+│  ├─ LoadingSpinner (while loading rooms)
+│  ├─ Room Grid (list of rooms)
+│  └─ Create Room Modal (conditional)
+│
+└─ Room Page (app/room/[roomId]/page.tsx) ⭐ NEW
+   └─ CollabCanvas (with roomId prop)
       ├─ AuthModal (conditional)
+      ├─ RoomHeader (top bar) ⭐ PR #5
+      │  ├─ Back button → /rooms
+      │  ├─ Room name
+      │  ├─ User count
+      │  ├─ Share button
+      │  └─ Settings button (owner only)
+      ├─ RoomSettings Modal (conditional) ⭐ PR #5
       ├─ tldraw Editor
       ├─ Cursors (overlays)
       ├─ UserList (sidebar)
       ├─ FloatingChat (bottom-right)
+      ├─ ExportDialog (conditional) ⭐ PR #6
       ├─ ConnectionStatus (conditional)
       └─ LoadingSpinner (conditional)
 ```
 
 ---
 
+## 📄 Pages (Next.js App Router)
+
+### 1. **Home Page** (`app/page.tsx`) ⭐ UPDATED
+**Route:** `/`  
+**Purpose:** Entry point that redirects to room list
+
+**Behavior:**
+- Immediately redirects to `/rooms`
+- Shows loading spinner during redirect
+
+### 2. **Rooms Page** (`app/rooms/page.tsx`) ⭐ NEW - PR #1
+**Route:** `/rooms`  
+**Purpose:** Room list and creation interface
+
+**Features:**
+- Displays grid of accessible rooms (owned + public)
+- Create new room modal
+- Empty state with CTA
+- Room cards show: name, member count, public/private badge, owner badge
+
+**State:**
+- `rooms: RoomMetadata[]` - List of rooms from Firestore
+- `loading: boolean` - Loading state
+- `showCreateModal: boolean` - Create room modal visibility
+- `newRoomName: string` - Room name input
+
+**Queries:**
+- Collection group query on "metadata" for owned rooms
+- Collection group query on "metadata" for public rooms
+- Combines and deduplicates results
+
+### 3. **Room Page** (`app/room/[roomId]/page.tsx`) ⭐ NEW - PR #1
+**Route:** `/room/[roomId]`  
+**Purpose:** Display specific collaborative room
+
+**Features:**
+- Validates room ID from URL
+- Loads room metadata
+- Renders CollabCanvas with room ID
+- Error states: Invalid ID, Not Found, Load Failed
+
+**State:**
+- `roomId: string | null` - From URL params (via useRoomId)
+- `roomMetadata: RoomMetadata | null` - Room info
+- `loading: boolean` - Loading state
+- `error: string | null` - Error message
+
+---
+
 ## 📦 Core Components
 
-### 1. **CollabCanvas.tsx** (Main Container)
+### 1. **CollabCanvas.tsx** (Main Container) ⭐ UPDATED - PR #1
 
 **Purpose:** Root component that orchestrates all canvas features
+
+**Props:** ⭐ UPDATED
+- `roomId?: string` - Room ID from URL (now REQUIRED for proper multi-room support)
 
 **State:**
 - `editor: Editor | null` - tldraw editor instance
 - `user: User | null` - Current authenticated user
+- `roomId: string` - Current room ID (from props)
+- `roomMetadata: RoomMetadata | null` - Room information
+- `showSettings: boolean` - Settings modal visibility (PR #5)
+- `showExportDialog: boolean` - Export dialog visibility (PR #6)
 
 **Hooks Used:**
 - `useAuth()` - Authentication state and user info
 - `useCursors(editor, user)` - Real-time cursor tracking
-- `useShapes(editor, user)` - Shape persistence and sync
+- `useShapes(editor, user, roomId)` - Shape persistence (room-scoped)
 - `usePresence(user)` - User presence awareness
 
 **Child Components:**

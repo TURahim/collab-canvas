@@ -16,12 +16,14 @@ A production-ready collaborative canvas application where multiple users can sim
 
 ### ✅ **All 10 PRs Complete - Production Ready & Refactored!**
 
-- **PR #1:** Project Setup & Configuration ✅
-  - Next.js 15 with App Router
-  - TypeScript strict mode
-  - Tailwind CSS v4
-  - Firebase integration
-  - Environment configuration
+- **PR #1:** Multi-Room Routing ✅ **NEW - Just Implemented!**
+  - Room list page at `/rooms` with grid layout
+  - Individual room pages at `/room/[roomId]`
+  - Room creation flow with validation
+  - Clean, shareable room URLs
+  - Room ID generation and validation
+  - Home page redirect to room list
+  - Perfect integration with all existing features
 
 - **PR #2:** Core Infrastructure ✅
   - TypeScript type definitions (User, Cursor, Shape)
@@ -254,13 +256,21 @@ pnpm install
    NEXT_PUBLIC_TLDRAW_LICENSE_KEY=your-tldraw-license (optional)
    ```
 
-### **3. Run Development Server**
+### **3. Run Development Server & Create Your First Room**
 
 ```bash
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) 🎉
+
+**First Time Setup:**
+1. You'll be redirected to `/rooms` (room list page)
+2. Click "**New Room**" button
+3. Enter a room name (e.g., "My First Room")
+4. Click "**Create Room**"
+5. Start drawing on your collaborative canvas!
+6. Share the room URL with others to collaborate in real-time
 
 ### **4. Run Tests**
 
@@ -277,12 +287,47 @@ pnpm test:coverage
 
 ---
 
+## 🗺️ **Application Routes**
+
+### **URL Structure**
+```
+/                    → Redirects to /rooms
+/rooms               → Room list page (create/join rooms)
+/room/[roomId]       → Individual collaborative canvas room
+```
+
+### **User Flow**
+```
+1. Visit app (/)
+   ↓
+2. Redirected to room list (/rooms)
+   ↓
+3. Click "New Room" or select existing room
+   ↓
+4. Open room canvas (/room/abc123)
+   ↓
+5. Collaborate with real-time sync
+   ↓
+6. Click back arrow to return to room list
+```
+
+### **Room Features**
+- **Create Rooms**: Unique, shareable URLs for each room
+- **Room List**: Grid view of all accessible rooms
+- **Owner Controls**: Settings, rename, delete (owner only)
+- **Public/Private**: Control room access
+- **Share Links**: Copy room URL to clipboard
+- **Room Isolation**: Shapes and presence scoped per room
+
+---
+
 ## 🌐 **Live Demo**
 
 **Production URL:** Deployed on Vercel
 
 **Features:**
 - Real-time multiplayer drawing
+- Multi-room support with clean URLs
 - Cursor synchronization across users  
 - Persistent shapes (saved to Firestore)
 - User presence indicators

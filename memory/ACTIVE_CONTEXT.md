@@ -1,19 +1,25 @@
 # ACTIVE CONTEXT - CollabCanvas
 
-**Last Updated:** October 15, 2025  
-**Session:** Memory Bank Initialization
+**Last Updated:** October 16, 2025  
+**Session:** PR #1 Multi-Room Routing Implementation
 
 ---
 
 ## 🔄 Current Work Session
 
-**Active Branch:** `mvp-submission`  
+**Active Branch:** `main`  
 **Recent Changes:**
-- Modified: `PROJECT_STATUS_COMPARISON.md`
-- Modified: `src/lib/__tests__/canvasTools.test.ts`
-- Untracked: `PROJECT_STATUS_COMPARISON_backup.md`
+- ✅ Implemented PR #1 (Multi-Room Routing)
+- ✅ Created room list and individual room pages
+- ✅ Deployed Firestore collection group rules and indexes
+- ✅ Updated memory bank and README
 
-**No Pending Commits**
+**Recent Commits:**
+- `805a8c5` - feat: implement PR #1 - Multi-Room Routing
+- `c2521c8` - fix: use collectionGroup for room metadata queries  
+- `8695f5c` - fix: correct collection group queries and rules
+
+**Status:** PR #1 Complete and Working ✅
 
 ---
 
@@ -32,6 +38,17 @@ users/
       x: number          // Cursor X position
       y: number          // Cursor Y position
     }
+
+// Future: Room-scoped presence (planned)
+rooms/
+  {roomId}/
+    presence/
+      {userId}/         // User presence per room
+    cursors/
+      {userId}/         // Cursor positions per room
+    access/
+      isPublic: boolean
+      owner: string
 ```
 
 **Security Rules:**
@@ -39,11 +56,27 @@ users/
 - Write: Only owner ($uid === auth.uid)
 - onDisconnect cleanup: Automatic
 
-### Cloud Firestore (Shape Persistence)
+### Cloud Firestore (Shape Persistence & Room Metadata)
 
 ```javascript
 rooms/
-  {roomId}/            // Default: "default"
+  {roomId}/            // Unique room ID (e.g., "mgt3oppl-qvumldmw")
+    metadata/
+      info/            // Room metadata document
+        id: string          // Room ID
+        name: string        // Room name (user-defined)
+        owner: string       // Owner's user ID
+        isPublic: boolean   // Public/private flag
+        members: {          // Room members
+          {userId}: {
+            userId: string
+            role: "owner" | "editor" | "viewer"
+            joinedAt: number
+          }
+        }
+        createdAt: timestamp
+        updatedAt: timestamp
+    
     shapes/
       {shapeId}/
         id: string          // Shape ID (TLShapeId)
@@ -67,6 +100,20 @@ rooms/
 - Read: All authenticated users
 - Create/Update: Authenticated + field validation (id, type, createdBy required)
 - Delete: All authenticated users (collaborative editing)
+
+---
+
+## 🌐 Application Routes
+
+### User-Facing Routes
+- **`/`** - Home page (redirects to `/rooms`)
+- **`/rooms`** - Room list page (create/join rooms)
+- **`/room/[roomId]`** - Individual collaborative canvas room
+
+### URL Parameters
+- **`roomId`** - Unique room identifier (format: `{timestamp}-{random}`)
+  - Example: `mgt3oppl-qvumldmw`
+  - Validation: `/^[a-zA-Z0-9_-]{1,64}$/`
 
 ---
 

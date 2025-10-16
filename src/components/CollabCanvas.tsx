@@ -9,7 +9,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
 import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
-import { getOrCreateDefaultRoom, getRoomMetadata } from "../lib/roomManagement";
+import { getRoomMetadata } from "../lib/roomManagement";
+import { getRoomsPath } from "../lib/paths";
 import type { RoomMetadata } from "../types/room";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
@@ -42,7 +43,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
   const router = useRouter();
   const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [roomId, setRoomId] = useState<string>(propRoomId || 'default');
+  const [roomId, setRoomId] = useState<string>(propRoomId || '');
   const [roomMetadata, setRoomMetadata] = useState<RoomMetadata | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
@@ -69,31 +70,35 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
   }, []);
 
   /**
-   * Initialize room - get or create default room for user
+   * Initialize room - load metadata for the current room
    */
   useEffect(() => {
     const initializeRoom = async (): Promise<void> => {
-      if (user && user.displayName) {
-        try {
-          const defaultRoomId = await getOrCreateDefaultRoom(user.uid, user.displayName);
-          setRoomId(defaultRoomId);
+      if (!user || !user.displayName) return;
+      
+      if (!propRoomId) {
+        console.warn('[CollabCanvas] No roomId provided');
+        return;
+      }
 
-          const metadata = await getRoomMetadata(defaultRoomId);
-          setRoomMetadata(metadata);
+      try {
+        setRoomId(propRoomId);
 
-          console.log('[CollabCanvas] Room initialized:', {
-            roomId: defaultRoomId,
-            roomName: metadata?.name,
-            isOwner: metadata?.owner === user.uid,
-          });
-        } catch (err) {
-          console.error('[CollabCanvas] Error initializing room:', err);
-        }
+        const metadata = await getRoomMetadata(propRoomId);
+        setRoomMetadata(metadata);
+
+        console.log('[CollabCanvas] Room initialized:', {
+          roomId: propRoomId,
+          roomName: metadata?.name,
+          isOwner: metadata?.owner === user.uid,
+        });
+      } catch (err) {
+        console.error('[CollabCanvas] Error initializing room:', err);
       }
     };
 
     void initializeRoom();
-  }, [user]);
+  }, [user, propRoomId]);
 
   /**
    * Editor mount handler - called when tldraw editor is initialized
@@ -201,7 +206,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
           isOwner={roomMetadata.owner === user?.uid}
           userCount={Object.keys(roomMetadata.members || {}).length}
           onSettingsClick={() => setShowSettings(true)}
-          onExitClick={() => router.push('/')}
+          onExitClick={() => router.push(getRoomsPath())}
         />
       )}
 
@@ -211,7 +216,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
           roomId={roomId}
           currentUserId={user.uid}
           onClose={() => setShowSettings(false)}
-          onRoomDeleted={() => router.push('/')}
+          onRoomDeleted={() => router.push(getRoomsPath())}
           onRoomUpdated={(name) => {
             setRoomMetadata({ ...roomMetadata, name });
           }}

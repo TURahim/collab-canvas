@@ -1,25 +1,36 @@
 /**
  * Home Page
- * Main entry point for the collaborative canvas application
+ * Main entry point - redirects to rooms list
  */
 
 "use client";
 
-import CollabCanvas from "../components/CollabCanvas";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getRoomsPath } from "../lib/paths";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 /**
  * Page - Home page component
  * 
- * Features:
- * - Full viewport height main container
- * - CollabCanvas as the primary UI
+ * Redirects to /rooms for multi-room support
  * 
- * @returns Home page with collaborative canvas
+ * @returns Loading state while redirecting
  */
 export default function Page(): React.JSX.Element {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect to rooms page
+    router.push(getRoomsPath());
+  }, [router]);
+
   return (
-    <main className="h-screen">
-      <CollabCanvas />
+    <main className="fixed inset-0 flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <LoadingSpinner />
+        <p className="mt-4 text-gray-600">Redirecting to rooms...</p>
+      </div>
     </main>
   );
 }

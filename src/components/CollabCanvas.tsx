@@ -9,7 +9,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
 import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
-import { usePages } from "../hooks/usePages";
 import { getRoomMetadata } from "../lib/roomManagement";
 import { getRoomsPath } from "../lib/paths";
 import type { RoomMetadata } from "../types/room";
@@ -131,14 +130,6 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
     enabled: !!user && !!user.displayName && !!roomId,
   });
 
-  // Set up real-time page synchronization
-  const { error: pageError } = usePages({
-    editor,
-    userId: user?.uid ?? null,
-    roomId,
-    enabled: !!user && !!user.displayName && !!roomId,
-  });
-
   // Log errors (moved to useEffect to prevent re-render spam)
   useEffect(() => {
     if (cursorError) {
@@ -151,12 +142,6 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
       console.error("[CollabCanvas] Shape sync error:", shapeError);
     }
   }, [shapeError]);
-
-  useEffect(() => {
-    if (pageError) {
-      console.error("[CollabCanvas] Page sync error:", pageError);
-    }
-  }, [pageError]);
 
   // Show error state if Firebase is not configured
   if (error && !user) {
@@ -241,7 +226,13 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
 
       {/* Canvas container with top padding for header */}
       <div className={roomMetadata ? "fixed inset-0 pt-14 md:pt-16" : "fixed inset-0"}>
-        <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
+        <Tldraw 
+          onMount={handleEditorMount} 
+          licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
+          components={{
+            PageMenu: null,  // Hide multi-page UI to keep single page per room
+          }}
+        />
         <Cursors editor={editor} remoteCursors={remoteCursors} />
         <UserList
           currentUserId={user?.uid ?? null}

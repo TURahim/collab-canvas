@@ -43,8 +43,9 @@ export default function RoomsPage(): React.JSX.Element {
         setLoading(true);
         setError(null);
 
-        // Query for rooms using collectionGroup (queries across all metadata subcollections)
+        // Query for rooms using collectionGroup (queries across all room metadata)
         // Room structure: rooms/{roomId}/metadata/info
+        // Collection name is "metadata", document is "info"
         
         // Get rooms owned by user
         const ownedQuery = query(

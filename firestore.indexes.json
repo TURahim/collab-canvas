@@ -46,23 +46,6 @@
   //     ]
   //   },
   // ]
-  "indexes": [
-    {
-      "collectionGroup": "metadata",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "owner", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "metadata",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "isPublic", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    }
-  ],
+  "indexes": [],
   "fieldOverrides": []
 }

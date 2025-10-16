@@ -1,9 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Collection group query support for metadata
-    // Allows querying across all rooms' metadata using collectionGroup
-    match /{path=**}/metadata/info {
+    // Collection group query support for room metadata
+    // Allows querying across all metadata collections using collectionGroup(db, "metadata")
+    match /{path=**}/metadata/{doc} {
       // Anyone authenticated can read any room metadata
       allow read: if request.auth != null;
       

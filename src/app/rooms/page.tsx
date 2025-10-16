@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collectionGroup, getDocs, query, where, orderBy, limit } from "firebase/firestore";
+import { collectionGroup, getDocs, query, where, limit, doc, getDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useAuth } from "../../hooks/useAuth";
 import { createRoom } from "../../lib/roomManagement";
@@ -61,14 +61,30 @@ export default function RoomsPage(): React.JSX.Element {
         );
         
         const [ownedSnapshot, publicSnapshot] = await Promise.all([
-          getDocs(ownedQuery).catch(() => ({ docs: [] })),
-          getDocs(publicQuery).catch(() => ({ docs: [] })),
+          getDocs(ownedQuery).catch((err) => {
+            console.error("[RoomsPage] Error fetching owned rooms:", err);
+            return { docs: [] };
+          }),
+          getDocs(publicQuery).catch((err) => {
+            console.error("[RoomsPage] Error fetching public rooms:", err);
+            return { docs: [] };
+          }),
         ]);
+
+        console.log("[RoomsPage] Query results:", {
+          ownedCount: ownedSnapshot.docs.length,
+          publicCount: publicSnapshot.docs.length,
+        });
 
         // Combine and deduplicate
         const roomMap = new Map<string, RoomMetadata>();
         
         [...ownedSnapshot.docs, ...publicSnapshot.docs].forEach((doc) => {
+          console.log("[RoomsPage] Processing doc:", {
+            id: doc.id,
+            path: doc.ref.path,
+            data: doc.data(),
+          });
           const metadata = doc.data() as RoomMetadata;
           const metadataId = metadata.id || doc.id;
           if (!roomMap.has(metadataId)) {
@@ -77,6 +93,7 @@ export default function RoomsPage(): React.JSX.Element {
         });
 
         const roomsList = Array.from(roomMap.values());
+        console.log("[RoomsPage] Final rooms list:", roomsList);
         setRooms(roomsList);
       } catch (err) {
         console.error("[RoomsPage] Error loading rooms:", err);

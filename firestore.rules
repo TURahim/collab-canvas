@@ -1,6 +1,33 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Collection group query support for metadata
+    // Allows querying across all rooms' metadata using collectionGroup
+    match /{path=**}/metadata/info {
+      // Anyone authenticated can read any room metadata
+      allow read: if request.auth != null;
+      
+      // Only room owner can create/update/delete room metadata
+      allow create: if request.auth != null
+        && request.resource.data.owner == request.auth.uid;
+      
+      allow update, delete: if request.auth != null
+        && resource.data.owner == request.auth.uid;
+    }
+    
+    // Specific path for room metadata (for direct document access)
+    match /rooms/{roomId}/metadata/info {
+      // Anyone authenticated can read room metadata
+      allow read: if request.auth != null;
+      
+      // Only room owner can create/update/delete room metadata
+      allow create: if request.auth != null
+        && request.resource.data.owner == request.auth.uid;
+      
+      allow update, delete: if request.auth != null
+        && resource.data.owner == request.auth.uid;
+    }
+    
     // Room-based shape storage
     match /rooms/{roomId}/shapes/{shapeId} {
       // Allow authenticated users to read all shapes in a room

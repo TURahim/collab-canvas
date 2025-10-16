@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tldraw/tldraw";
-import { Tldraw } from "@tldraw/tldraw";
+import { Tldraw, DefaultToolbar } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import { useCallback, useEffect, useState } from "react";
 
@@ -12,6 +12,7 @@ import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
 import UserList from "./UserList";
 import { FloatingChat } from "./FloatingChat";
+import ExportDialog from "./ExportDialog";
 
 /**
  * CollabCanvas - Main collaborative whiteboard component
@@ -29,6 +30,7 @@ import { FloatingChat } from "./FloatingChat";
 export default function CollabCanvas(): React.JSX.Element {
   const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
 
   /**
    * Debug: Check if Tldraw component is remounting and verify license key
@@ -158,7 +160,38 @@ export default function CollabCanvas(): React.JSX.Element {
         />
       </div>
 
-      <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
+      <Tldraw 
+        onMount={handleEditorMount} 
+        licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
+        components={{
+          Toolbar: (props) => {
+            return (
+              <div className="flex flex-col gap-2">
+                <DefaultToolbar {...props} />
+                <button
+                  onClick={() => setShowExportDialog(true)}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-md transition-colors hover:bg-gray-100"
+                  title="Export canvas (Ctrl+E)"
+                >
+                  <svg
+                    className="h-5 w-5 text-gray-700"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                    />
+                  </svg>
+                </button>
+              </div>
+            );
+          },
+        }}
+      />
       <Cursors editor={editor} remoteCursors={remoteCursors} />
       <UserList
         currentUserId={user?.uid ?? null}
@@ -177,6 +210,13 @@ export default function CollabCanvas(): React.JSX.Element {
       
       {/* AI Chat Widget */}
       <FloatingChat editor={editor} />
+      
+      {/* Export Dialog */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        editor={editor}
+      />
     </div>
   );
 }

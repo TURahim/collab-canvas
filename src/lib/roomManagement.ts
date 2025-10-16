@@ -235,8 +235,15 @@ export async function deleteRoom(
     // Delete shapes collection
     const shapesRef = collection(db, "rooms", roomId, "shapes");
     const shapesSnapshot = await getDocs(shapesRef);
-    const deletePromises = shapesSnapshot.docs.map((doc) => deleteDoc(doc.ref));
-    await Promise.all(deletePromises);
+    const shapeDeletePromises = shapesSnapshot.docs.map((doc) => deleteDoc(doc.ref));
+    
+    // Delete pages collection
+    const pagesRef = collection(db, "rooms", roomId, "pages");
+    const pagesSnapshot = await getDocs(pagesRef);
+    const pageDeletePromises = pagesSnapshot.docs.map((doc) => deleteDoc(doc.ref));
+    
+    // Execute all deletions in parallel
+    await Promise.all([...shapeDeletePromises, ...pageDeletePromises]);
 
     // Delete from RTDB (presence, cursors, access)
     const roomRtdbRef = ref(realtimeDb, `rooms/${roomId}`);
@@ -263,7 +270,9 @@ export async function getOrCreateDefaultRoom(userId: string, displayName: string
     }
     
     // Create default room if it doesn't exist
-    const roomName = `${displayName}'s Room`;
+    // Sanitize display name to remove invalid characters (keep only alphanumeric, spaces, hyphens, underscores)
+    const sanitizedName = displayName.replace(/[^a-zA-Z0-9\s\-_]/g, '');
+    const roomName = `${sanitizedName} Room`;
     await createRoom(defaultRoomId, roomName, userId, true);
     return defaultRoomId;
   } catch (error) {

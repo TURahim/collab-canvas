@@ -42,5 +42,20 @@ service cloud.firestore {
       // Allow users to delete shapes (any authenticated user for collaborative editing)
       allow delete: if request.auth != null;
     }
+    
+    // Room-based page (tabs) storage
+    match /rooms/{roomId}/pages/{pageId} {
+      // Allow authenticated users to read all pages in a room
+      allow read: if request.auth != null;
+      
+      // Allow authenticated users to create and update pages
+      allow create, update: if request.auth != null
+        && request.resource.data.createdBy is string
+        && request.resource.data.id is string
+        && request.resource.data.name is string;
+      
+      // Allow users to delete pages (any authenticated user for collaborative editing)
+      allow delete: if request.auth != null;
+    }
   }
 }

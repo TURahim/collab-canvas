@@ -20,7 +20,7 @@ import LoadingSpinner from "../../components/LoadingSpinner";
  */
 export default function RoomsPage(): React.JSX.Element {
   const router = useRouter();
-  const { user, loading: authLoading, error: authError, setDisplayName } = useAuth();
+  const { user, loading: authLoading, error: authError, setDisplayName, signOutUser } = useAuth();
   
   const [rooms, setRooms] = useState<RoomMetadata[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,17 +188,39 @@ export default function RoomsPage(): React.JSX.Element {
                 Create and join collaborative canvas rooms
               </p>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              <span className="flex items-center gap-2">
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                New Room
-              </span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New Room
+                </span>
+              </button>
+              
+              {user && (
+                <button
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to log out?')) {
+                      await signOutUser();
+                      router.push('/');
+                    }
+                  }}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  title="Logout"
+                >
+                  <span className="flex items-center gap-2">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span className="hidden sm:inline">Logout</span>
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

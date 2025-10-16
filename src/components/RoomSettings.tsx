@@ -192,7 +192,7 @@ export default function RoomSettings({
           
           <div className="mb-4 rounded-lg bg-red-50 p-4">
             <p className="text-sm text-red-900">
-              This will permanently delete "<strong>{roomMetadata?.name}</strong>" and all its contents.
+              This will permanently delete &ldquo;<strong>{roomMetadata?.name}</strong>&rdquo; and all its contents.
               <br />
               <strong>This action cannot be undone.</strong>
             </p>

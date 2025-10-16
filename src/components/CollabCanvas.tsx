@@ -28,14 +28,20 @@ import RoomSettings from "./RoomSettings";
  * - Tldraw integration with license key support
  * - Error state handling for Firebase configuration
  * - Loading states during authentication
+ * - Room-based collaboration with settings UI
  * 
+ * @param roomId - Optional room ID for multi-room support (defaults to "default")
  * @returns Collaborative canvas interface
  */
-export default function CollabCanvas(): React.JSX.Element {
+interface CollabCanvasProps {
+  roomId?: string;
+}
+
+export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps = {}): React.JSX.Element {
   const router = useRouter();
   const { user, loading, error, setDisplayName } = useAuth();
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [roomId, setRoomId] = useState<string>('default');
+  const [roomId, setRoomId] = useState<string>(propRoomId || 'default');
   const [roomMetadata, setRoomMetadata] = useState<RoomMetadata | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -191,7 +197,7 @@ export default function CollabCanvas(): React.JSX.Element {
           roomId={roomId}
           roomName={roomMetadata.name}
           isOwner={roomMetadata.owner === user?.uid}
-          userCount={roomMetadata.memberCount}
+          userCount={Object.keys(roomMetadata.members || {}).length}
           onSettingsClick={() => setShowSettings(true)}
           onExitClick={() => router.push('/')}
         />

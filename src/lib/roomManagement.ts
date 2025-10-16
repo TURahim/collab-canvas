@@ -12,11 +12,9 @@ import {
   deleteDoc,
   serverTimestamp,
   getDocs,
-  query,
-  where,
 } from "firebase/firestore";
 import { ref, set, remove } from "firebase/database";
-import { firestore, realtimeDb } from "./firebase";
+import { db, realtimeDb } from "./firebase";
 import type { RoomMetadata, RoomSettings, ValidationResult } from "../types/room";
 
 /**
@@ -87,7 +85,7 @@ export async function canDeleteRoom(
   userId: string
 ): Promise<boolean> {
   try {
-    const roomRef = doc(firestore, "rooms", roomId, "metadata", "info");
+    const roomRef = doc(db, "rooms", roomId, "metadata", "info");
     const roomDoc = await getDoc(roomRef);
 
     if (!roomDoc.exists()) {
@@ -109,7 +107,7 @@ export async function getRoomMetadata(
   roomId: string
 ): Promise<RoomMetadata | null> {
   try {
-    const roomRef = doc(firestore, "rooms", roomId, "metadata", "info");
+    const roomRef = doc(db, "rooms", roomId, "metadata", "info");
     const roomDoc = await getDoc(roomRef);
 
     if (!roomDoc.exists()) {
@@ -138,7 +136,7 @@ export async function createRoom(
       throw new Error(validation.error);
     }
 
-    const roomRef = doc(firestore, "rooms", roomId, "metadata", "info");
+    const roomRef = doc(db, "rooms", roomId, "metadata", "info");
     const roomData: Omit<RoomMetadata, "createdAt" | "updatedAt"> = {
       id: roomId,
       name: name.trim(),
@@ -192,7 +190,7 @@ export async function updateRoomMetadata(
       throw new Error("Only the room owner can update room settings");
     }
 
-    const roomRef = doc(firestore, "rooms", roomId, "metadata", "info");
+    const roomRef = doc(db, "rooms", roomId, "metadata", "info");
     const updateData: Record<string, unknown> = {
       updatedAt: serverTimestamp(),
     };
@@ -231,11 +229,11 @@ export async function deleteRoom(
     }
 
     // Delete from Firestore (metadata and shapes)
-    const roomMetadataRef = doc(firestore, "rooms", roomId, "metadata", "info");
+    const roomMetadataRef = doc(db, "rooms", roomId, "metadata", "info");
     await deleteDoc(roomMetadataRef);
 
     // Delete shapes collection
-    const shapesRef = collection(firestore, "rooms", roomId, "shapes");
+    const shapesRef = collection(db, "rooms", roomId, "shapes");
     const shapesSnapshot = await getDocs(shapesRef);
     const deletePromises = shapesSnapshot.docs.map((doc) => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
@@ -245,6 +243,31 @@ export async function deleteRoom(
     await remove(roomRtdbRef);
   } catch (error) {
     console.error("[roomManagement] Error deleting room:", error);
+    throw error;
+  }
+}
+
+/**
+ * Gets or creates the default room
+ * Used for backward compatibility when no specific room is provided
+ */
+export async function getOrCreateDefaultRoom(userId: string, displayName: string): Promise<string> {
+  const defaultRoomId = "default";
+  
+  try {
+    // Check if default room exists
+    const existingRoom = await getRoomMetadata(defaultRoomId);
+    
+    if (existingRoom) {
+      return defaultRoomId;
+    }
+    
+    // Create default room if it doesn't exist
+    const roomName = `${displayName}'s Room`;
+    await createRoom(defaultRoomId, roomName, userId, true);
+    return defaultRoomId;
+  } catch (error) {
+    console.error("[roomManagement] Error getting or creating default room:", error);
     throw error;
   }
 }

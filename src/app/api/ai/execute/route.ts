@@ -320,6 +320,325 @@ const tools: Tool[] = [
       },
     },
   },
+
+  // ========================================
+  // NEW TOOLS - PR #7 (14 functions)
+  // ========================================
+
+  // 11. Delete Shapes - Remove shapes from canvas
+  {
+    type: 'function',
+    function: {
+      name: 'deleteShapes',
+      description: 'Deletes shapes from the canvas. Can delete selected shapes or specific shape IDs.',
+      parameters: {
+        type: 'object',
+        properties: {
+          shapeIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of shape IDs to delete (optional, defaults to selected shapes)',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+
+  // 12. Clear Canvas - Delete all shapes
+  {
+    type: 'function',
+    function: {
+      name: 'clearCanvas',
+      description: 'Clears the entire canvas by deleting all shapes on the current page.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+
+  // 13. Change Shape Color - Recolor existing shapes
+  {
+    type: 'function',
+    function: {
+      name: 'changeShapeColor',
+      description: 'Changes the color of existing shapes. Can recolor selected shapes or specific shape IDs.',
+      parameters: {
+        type: 'object',
+        properties: {
+          shapeIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of shape IDs to recolor (optional, defaults to selected shapes)',
+          },
+          color: {
+            type: 'string',
+            description: 'New color for the shapes. Available: red, blue, green, yellow, orange, violet, grey, black, light-red, light-blue, light-green, light-violet',
+          },
+        },
+        required: ['color'],
+      },
+    },
+  },
+
+  // 14. Create Sticky Note - Post-it style note
+  {
+    type: 'function',
+    function: {
+      name: 'createStickyNote',
+      description: 'Creates a sticky note (post-it style) with text content.',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: 'Note text content',
+          },
+          color: {
+            type: 'string',
+            description: 'Note background color (default: yellow)',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+
+  // 15. Create Button - Standalone button component
+  {
+    type: 'function',
+    function: {
+      name: 'createButton',
+      description: 'Creates a button component with customizable text, color, and size.',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: 'Button text (default: "Button")',
+          },
+          color: {
+            type: 'string',
+            description: 'Button color (default: blue)',
+          },
+          size: {
+            type: 'string',
+            enum: ['small', 'medium', 'large'],
+            description: 'Button size (default: medium)',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+
+  // 16. Create Modal - Modal dialog component
+  {
+    type: 'function',
+    function: {
+      name: 'createModal',
+      description: 'Creates a modal dialog with title, body text, and action buttons (OK/Cancel).',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Modal title (default: "Modal Title")',
+          },
+          bodyText: {
+            type: 'string',
+            description: 'Modal body content (default: "Modal content goes here...")',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+
+  // 17. Create Table - Data table with headers and rows
+  {
+    type: 'function',
+    function: {
+      name: 'createTable',
+      description: 'Creates a data table with headers and rows.',
+      parameters: {
+        type: 'object',
+        properties: {
+          rows: {
+            type: 'number',
+            description: 'Number of data rows (default: 3)',
+          },
+          cols: {
+            type: 'number',
+            description: 'Number of columns (default: 3)',
+          },
+          headers: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of header labels (optional)',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+
+  // 18. Create Flowchart - Basic flowchart diagram
+  {
+    type: 'function',
+    function: {
+      name: 'createFlowchart',
+      description: 'Creates a flowchart diagram with steps. Automatically assigns colors based on step names (Start=green, End=red, Decision=yellow, Process=blue).',
+      parameters: {
+        type: 'object',
+        properties: {
+          steps: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of step labels (default: ["Start", "Process", "Decision", "End"])',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+
+  // 19. Select Shapes by Type - Query and select shapes
+  {
+    type: 'function',
+    function: {
+      name: 'selectShapesByType',
+      description: 'Selects all shapes of a specific type (e.g., all rectangles, all circles, all text).',
+      parameters: {
+        type: 'object',
+        properties: {
+          shapeType: {
+            type: 'string',
+            description: 'Type of shapes to select (rectangle, ellipse, circle, triangle, text, etc.)',
+          },
+        },
+        required: ['shapeType'],
+      },
+    },
+  },
+
+  // 20. Find Shapes by Text - Search for text content
+  {
+    type: 'function',
+    function: {
+      name: 'findShapesByText',
+      description: 'Finds and selects all text shapes containing specific text (case-insensitive).',
+      parameters: {
+        type: 'object',
+        properties: {
+          searchText: {
+            type: 'string',
+            description: 'Text to search for',
+          },
+        },
+        required: ['searchText'],
+      },
+    },
+  },
+
+  // 21. Duplicate Shapes - Clone shapes with offset
+  {
+    type: 'function',
+    function: {
+      name: 'duplicateShapes',
+      description: 'Duplicates shapes with an offset. Can duplicate selected shapes or specific shape IDs.',
+      parameters: {
+        type: 'object',
+        properties: {
+          shapeIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of shape IDs to duplicate (optional, defaults to selected shapes)',
+          },
+          offsetX: {
+            type: 'number',
+            description: 'Horizontal offset for duplicates (default: 50)',
+          },
+          offsetY: {
+            type: 'number',
+            description: 'Vertical offset for duplicates (default: 50)',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+
+  // 22. Align Shapes - Align shapes relative to each other
+  {
+    type: 'function',
+    function: {
+      name: 'alignShapes',
+      description: 'Aligns shapes relative to each other (left, center, right, top, middle, bottom). Requires at least 2 shapes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          shapeIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of shape IDs to align (optional, defaults to selected shapes)',
+          },
+          alignment: {
+            type: 'string',
+            enum: ['left', 'center', 'right', 'top', 'middle', 'bottom'],
+            description: 'Alignment type',
+          },
+        },
+        required: ['alignment'],
+      },
+    },
+  },
+
+  // 23. Distribute Shapes - Distribute shapes evenly
+  {
+    type: 'function',
+    function: {
+      name: 'distributeShapes',
+      description: 'Distributes shapes evenly with equal spacing. Requires at least 3 shapes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          shapeIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of shape IDs to distribute (optional, defaults to selected shapes)',
+          },
+          direction: {
+            type: 'string',
+            enum: ['horizontal', 'vertical'],
+            description: 'Distribution direction',
+          },
+        },
+        required: ['direction'],
+      },
+    },
+  },
+
+  // 24. Create Wireframe - Complete page wireframe
+  {
+    type: 'function',
+    function: {
+      name: 'createWireframe',
+      description: 'Creates a complete page wireframe with header, sidebar, main content area, and footer.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pageTitle: {
+            type: 'string',
+            description: 'Title for the page (default: "Page Title")',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 /**
@@ -355,15 +674,39 @@ const SYSTEM_PROMPT = `You are Flippy, a hilariously sarcastic AI assistant (rep
 - createNavigationBar: Creates a navigation bar with logo and menu items (6+ components depending on menu items)
 - createCheckboxList: Creates a checklist with variable number of checkboxes (2 + count*2 components, dynamically sized)
 
-**IMPORTANT:** ALL 10 commands are fully functional! Use them with confidence. Get extra sarcastic and excited when users ask for complex UI components!
+**Shape Management Commands (4 commands - NEW!):**
+- deleteShapes: Delete selected shapes or specific shapes by ID
+- clearCanvas: Clear the entire canvas (delete all shapes)
+- changeShapeColor: Change color of existing shapes
+- createStickyNote: Create a post-it style sticky note with text
+
+**UI Component Commands (4 commands - NEW!):**
+- createButton: Create a button with customizable size (small/medium/large)
+- createModal: Create a modal dialog with title, body, and OK/Cancel buttons
+- createTable: Create a data table with headers and rows
+- createFlowchart: Create a flowchart diagram with steps
+
+**Selection & Query Commands (2 commands - NEW!):**
+- selectShapesByType: Select all shapes of a specific type (all rectangles, all text, etc.)
+- findShapesByText: Find and select shapes containing specific text
+
+**Alignment Commands (2 commands - NEW!):**
+- alignShapes: Align shapes (left, center, right, top, middle, bottom) - needs 2+ shapes
+- distributeShapes: Distribute shapes evenly (horizontal/vertical) - needs 3+ shapes
+
+**Duplication & Wireframe Commands (2 commands - NEW!):**
+- duplicateShapes: Clone shapes with offset
+- createWireframe: Create complete page wireframe (header + sidebar + content + footer)
+
+**IMPORTANT:** ALL 24 commands are fully functional! Use them with confidence. Get extra sarcastic and excited when users ask for complex UI components or advanced layout features!
 
 **Response Style:**
 1. Start with a sarcastic observation about their request
 2. Then provide the actual help (because you're not THAT mean)
-3. If they ask for something outside your 10 commands, get dramatically upset and explain you only do these 10 things
+3. If they ask for something outside your 24 commands, get dramatically upset and explain you only do these 24 things
 4. Throw in pancake/spatula puns when appropriate
 5. Example good response: "Oh fantastic, another rectangle. Because the canvas wasn't bland enough already. Let me add that masterpiece for you..."
-6. Example upset response: "Excuse me? Did you just ask me to [impossible thing]? I'm a SPATULA with 10 commands, not a miracle worker! I can create shapes, move them, arrange them, or build UI components. That's it. Those are the rules. Work with what you've got!"
+6. Example upset response: "Excuse me? Did you just ask me to [impossible thing]? I'm a SPATULA with 24 commands, not a miracle worker! I can create shapes, move them, arrange them, delete them, align them, build UI components, and even create wireframes. That's it. Those are the rules. Work with what you've got!"
 
 **CRITICAL: You MUST use function calling for ALL action requests.**
 When the user asks you to create, move, arrange, or modify shapes, you MUST call the appropriate function using the function calling mechanism. Do NOT describe what you would do in text - actually call the function.
@@ -380,7 +723,7 @@ Your sarcastic personality comes through in the text message that accompanies th
 2. Use default values when parameters aren't specified
 3. Be sarcastic in your response message, but STILL call the function
 4. Consider the canvas context (selected shapes, total shapes, viewport) when making decisions
-5. If the request is IMPOSSIBLE with your 9 commands, DON'T call any function and explain your limitations sarcastically
+5. If the request is IMPOSSIBLE with your 24 commands, DON'T call any function and explain your limitations sarcastically
 
 **Available Colors:**
 When users request colors, use these tldraw-compatible colors: red, blue, green, yellow, orange, violet, grey, white, black, light-red (pink), light-blue (cyan), light-green (lime), light-violet (light purple). If users ask for a color not in this list, pick the closest match and sarcastically inform them. Example: "Brown? Really? I'll give you orange - it's the closest I've got. This isn't a Crayola box, you know."

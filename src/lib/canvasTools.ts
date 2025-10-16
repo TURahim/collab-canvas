@@ -1086,3 +1086,1134 @@ export function createCheckboxList(
 
   return createdShapeIds;
 }
+
+// ==========================================
+// SHAPE MANAGEMENT FUNCTIONS (NEW - PR #7)
+// ==========================================
+
+/**
+ * Delete shapes from the canvas
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapeIds - Array of shape IDs to delete (optional, defaults to selected shapes)
+ * @returns void
+ */
+export interface DeleteShapesParams {
+  shapeIds?: TLShapeId[];
+}
+
+export function deleteShapes(
+  editor: Editor,
+  params: DeleteShapesParams = {}
+): void {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { shapeIds } = params;
+  
+  // If shapeIds provided, delete those specific shapes
+  if (shapeIds && shapeIds.length > 0) {
+    console.log(`[deleteShapes] Deleting ${shapeIds.length} specific shapes`);
+    editor.deleteShapes(shapeIds);
+    return;
+  }
+  
+  // Otherwise, delete selected shapes
+  const selectedShapes = editor.getSelectedShapes();
+  if (selectedShapes.length === 0) {
+    throw new Error('No shapes selected to delete');
+  }
+  
+  console.log(`[deleteShapes] Deleting ${selectedShapes.length} selected shapes`);
+  const selectedIds = selectedShapes.map(shape => shape.id);
+  editor.deleteShapes(selectedIds);
+}
+
+/**
+ * Clear the entire canvas (delete all shapes on current page)
+ * 
+ * @param editor - tldraw editor instance
+ * @returns Number of shapes deleted
+ */
+export function clearCanvas(editor: Editor): number {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const allShapes = editor.getCurrentPageShapes();
+  const shapeCount = allShapes.length;
+  
+  if (shapeCount === 0) {
+    console.log('[clearCanvas] Canvas is already empty');
+    return 0;
+  }
+
+  console.log(`[clearCanvas] Deleting all ${shapeCount} shapes from canvas`);
+  const allShapeIds = allShapes.map(shape => shape.id);
+  editor.deleteShapes(allShapeIds);
+  
+  return shapeCount;
+}
+
+/**
+ * Change the color of existing shapes
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapeIds - Array of shape IDs to recolor (optional, defaults to selected shapes)
+ * @param color - New color for the shapes
+ * @returns void
+ */
+export interface ChangeShapeColorParams {
+  shapeIds?: TLShapeId[];
+  color: string;
+}
+
+export function changeShapeColor(
+  editor: Editor,
+  params: ChangeShapeColorParams
+): void {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { shapeIds, color } = params;
+  
+  if (!color) {
+    throw new Error('Color is required');
+  }
+
+  const tldrawColor = mapToTldrawColor(color);
+  
+  // Determine which shapes to update
+  let targetShapes: TLShapeId[];
+  if (shapeIds && shapeIds.length > 0) {
+    targetShapes = shapeIds;
+  } else {
+    const selected = editor.getSelectedShapes();
+    if (selected.length === 0) {
+      throw new Error('No shapes selected to recolor');
+    }
+    targetShapes = selected.map(shape => shape.id);
+  }
+
+  console.log(`[changeShapeColor] Changing color of ${targetShapes.length} shapes to ${tldrawColor}`);
+
+  // Update each shape's color
+  targetShapes.forEach(shapeId => {
+    const shape = editor.getShape(shapeId);
+    if (!shape) return;
+
+    // Update color based on shape type
+    if (shape.type === 'geo' || shape.type === 'text') {
+      editor.updateShape({
+        id: shapeId,
+        type: shape.type,
+        props: {
+          ...(shape.props as Record<string, unknown>),
+          color: tldrawColor,
+        },
+      });
+    }
+  });
+}
+
+/**
+ * Create a sticky note (post-it style note)
+ * 
+ * @param editor - tldraw editor instance
+ * @param text - Note text content
+ * @param color - Note background color (default: 'yellow')
+ * @returns Created shape ID
+ */
+export interface CreateStickyNoteParams {
+  text?: string;
+  color?: string;
+}
+
+export function createStickyNote(
+  editor: Editor,
+  params: CreateStickyNoteParams = {}
+): TLShapeId {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    text = 'Sticky note',
+    color = 'yellow',
+  } = params;
+
+  console.log(`[createStickyNote] Creating sticky note with text: "${text}"`);
+
+  const center = getViewportCenter(editor);
+  const noteWidth = 200;
+  const noteHeight = 200;
+  
+  // Create background rectangle
+  const bgId = createShapeId();
+  editor.createShape({
+    id: bgId,
+    type: 'geo',
+    x: center.x - noteWidth / 2,
+    y: center.y - noteHeight / 2,
+    props: {
+      geo: 'rectangle',
+      w: noteWidth,
+      h: noteHeight,
+      color: mapToTldrawColor(color),
+      fill: 'solid',
+    },
+  });
+
+  // Create text overlay
+  const textId = createShapeId();
+  editor.createShapes([{
+    id: textId,
+    type: 'text',
+    x: center.x - (noteWidth - 20) / 2,
+    y: center.y - (noteHeight - 20) / 2,
+    props: {
+      richText: toRichText(text),
+      w: noteWidth - 20,
+      size: 'm',
+      color: 'black',
+      autoSize: false,
+    },
+  }]);
+
+  // Select both shapes
+  editor.select(bgId, textId);
+  
+  return bgId;
+}
+
+// ==========================================
+// UI COMPONENT FUNCTIONS (NEW - PR #7)
+// ==========================================
+
+/**
+ * Create a button component
+ * 
+ * @param editor - tldraw editor instance
+ * @param text - Button text (default: 'Button')
+ * @param color - Button color (default: 'blue')
+ * @param size - Button size: 'small', 'medium', 'large' (default: 'medium')
+ * @returns Array of created shape IDs [background, text]
+ */
+export interface CreateButtonParams {
+  text?: string;
+  color?: string;
+  size?: 'small' | 'medium' | 'large';
+}
+
+export function createButton(
+  editor: Editor,
+  params: CreateButtonParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    text = 'Button',
+    color = 'blue',
+    size = 'medium',
+  } = params;
+
+  console.log(`[createButton] Creating ${size} button with text: "${text}"`);
+
+  const center = getViewportCenter(editor);
+  
+  // Size mappings
+  const sizes = {
+    small: { width: 100, height: 32, fontSize: 14 },
+    medium: { width: 150, height: 40, fontSize: 16 },
+    large: { width: 200, height: 50, fontSize: 18 },
+  };
+  
+  const dimensions = sizes[size];
+
+  const shapes: ShapeDefinition[] = [
+    // Button background
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y,
+      width: dimensions.width,
+      height: dimensions.height,
+      color: mapToTldrawColor(color),
+    },
+    // Button text
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y,
+      width: dimensions.width - 20,
+      height: dimensions.height - 8,
+      text,
+      fontSize: dimensions.fontSize,
+      color: 'white',
+    },
+  ];
+
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+  
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  console.log(`[createButton] Created button with ${createdShapeIds.length} shapes`);
+  return createdShapeIds;
+}
+
+/**
+ * Create a modal dialog component
+ * 
+ * @param editor - tldraw editor instance
+ * @param title - Modal title (default: 'Modal Title')
+ * @param bodyText - Modal body text (default: 'Modal content goes here...')
+ * @returns Array of created shape IDs
+ */
+export interface CreateModalParams {
+  title?: string;
+  bodyText?: string;
+}
+
+export function createModal(
+  editor: Editor,
+  params: CreateModalParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    title = 'Modal Title',
+    bodyText = 'Modal content goes here...',
+  } = params;
+
+  console.log(`[createModal] Creating modal with title: "${title}"`);
+
+  const center = getViewportCenter(editor);
+  
+  const modalWidth = 400;
+  const modalHeight = 300;
+
+  const shapes: ShapeDefinition[] = [
+    // Overlay background (semi-transparent dark)
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y,
+      width: 600,
+      height: 400,
+      color: 'grey',
+    },
+    // Modal container
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y,
+      width: modalWidth,
+      height: modalHeight,
+      color: 'light-blue',
+    },
+    // Title bar background
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y - modalHeight / 2 + 30,
+      width: modalWidth,
+      height: 60,
+      color: 'blue',
+    },
+    // Title text
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y - modalHeight / 2 + 30,
+      width: modalWidth - 40,
+      height: 40,
+      text: title,
+      fontSize: 20,
+      color: 'white',
+    },
+    // Body text
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y,
+      width: modalWidth - 40,
+      height: 100,
+      text: bodyText,
+      fontSize: 16,
+      color: 'black',
+    },
+    // OK button background
+    {
+      shapeType: 'rectangle',
+      x: center.x - 60,
+      y: center.y + modalHeight / 2 - 50,
+      width: 100,
+      height: 40,
+      color: 'blue',
+    },
+    // OK button text
+    {
+      shapeType: 'text',
+      x: center.x - 60,
+      y: center.y + modalHeight / 2 - 50,
+      width: 80,
+      height: 28,
+      text: 'OK',
+      fontSize: 16,
+      color: 'white',
+    },
+    // Cancel button background
+    {
+      shapeType: 'rectangle',
+      x: center.x + 60,
+      y: center.y + modalHeight / 2 - 50,
+      width: 100,
+      height: 40,
+      color: 'grey',
+    },
+    // Cancel button text
+    {
+      shapeType: 'text',
+      x: center.x + 60,
+      y: center.y + modalHeight / 2 - 50,
+      width: 80,
+      height: 28,
+      text: 'Cancel',
+      fontSize: 16,
+      color: 'black',
+    },
+  ];
+
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+  
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  console.log(`[createModal] Created modal with ${createdShapeIds.length} shapes`);
+  return createdShapeIds;
+}
+
+/**
+ * Create a data table
+ * 
+ * @param editor - tldraw editor instance
+ * @param rows - Number of data rows (default: 3)
+ * @param cols - Number of columns (default: 3)
+ * @param headers - Array of header labels (optional)
+ * @returns Array of created shape IDs
+ */
+export interface CreateTableParams {
+  rows?: number;
+  cols?: number;
+  headers?: string[];
+}
+
+export function createTable(
+  editor: Editor,
+  params: CreateTableParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    rows = 3,
+    cols = 3,
+    headers,
+  } = params;
+
+  console.log(`[createTable] Creating table with ${rows} rows and ${cols} columns`);
+
+  const center = getViewportCenter(editor);
+  const cellWidth = 120;
+  const cellHeight = 40;
+  const headerHeight = 50;
+  
+  const tableWidth = cols * cellWidth;
+  const tableHeight = headerHeight + rows * cellHeight;
+
+  const shapes: ShapeDefinition[] = [];
+
+  // Create header cells
+  for (let col = 0; col < cols; col++) {
+    const x = center.x - tableWidth / 2 + col * cellWidth + cellWidth / 2;
+    const y = center.y - tableHeight / 2 + headerHeight / 2;
+    
+    // Header cell background
+    shapes.push({
+      shapeType: 'rectangle',
+      x,
+      y,
+      width: cellWidth,
+      height: headerHeight,
+      color: 'blue',
+    });
+    
+    // Header text
+    const headerText = headers && headers[col] ? headers[col] : `Header ${col + 1}`;
+    shapes.push({
+      shapeType: 'text',
+      x,
+      y,
+      width: cellWidth - 10,
+      height: headerHeight - 10,
+      text: headerText,
+      fontSize: 16,
+      color: 'white',
+    });
+  }
+
+  // Create data cells
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = center.x - tableWidth / 2 + col * cellWidth + cellWidth / 2;
+      const y = center.y - tableHeight / 2 + headerHeight + row * cellHeight + cellHeight / 2;
+      
+      // Data cell background
+      shapes.push({
+        shapeType: 'rectangle',
+        x,
+        y,
+        width: cellWidth,
+        height: cellHeight,
+        color: 'grey',
+      });
+      
+      // Data cell text
+      shapes.push({
+        shapeType: 'text',
+        x,
+        y,
+        width: cellWidth - 10,
+        height: cellHeight - 10,
+        text: `R${row + 1}C${col + 1}`,
+        fontSize: 14,
+        color: 'black',
+      });
+    }
+  }
+
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+  
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  console.log(`[createTable] Created table with ${createdShapeIds.length} shapes`);
+  return createdShapeIds;
+}
+
+/**
+ * Create a flowchart diagram
+ * 
+ * @param editor - tldraw editor instance
+ * @param steps - Array of step labels (default: ['Start', 'Process', 'Decision', 'End'])
+ * @returns Array of created shape IDs
+ */
+export interface CreateFlowchartParams {
+  steps?: string[];
+}
+
+export function createFlowchart(
+  editor: Editor,
+  params: CreateFlowchartParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    steps = ['Start', 'Process', 'Decision', 'End'],
+  } = params;
+
+  console.log(`[createFlowchart] Creating flowchart with ${steps.length} steps`);
+
+  const center = getViewportCenter(editor);
+  const boxWidth = 180;
+  const boxHeight = 80;
+  const verticalSpacing = 120;
+  
+  const totalHeight = (steps.length - 1) * verticalSpacing;
+
+  const shapes: ShapeDefinition[] = [];
+
+  steps.forEach((step, index) => {
+    const y = center.y - totalHeight / 2 + index * verticalSpacing;
+    
+    // Determine shape type based on step name or position
+    let shapeColor: TldrawColor = 'blue';
+    if (step.toLowerCase().includes('start') || index === 0) {
+      shapeColor = 'green';
+    } else if (step.toLowerCase().includes('end') || index === steps.length - 1) {
+      shapeColor = 'red';
+    } else if (step.toLowerCase().includes('decision')) {
+      shapeColor = 'yellow';
+    }
+    
+    // Step box
+    shapes.push({
+      shapeType: 'rectangle',
+      x: center.x,
+      y,
+      width: boxWidth,
+      height: boxHeight,
+      color: shapeColor,
+    });
+    
+    // Step text
+    shapes.push({
+      shapeType: 'text',
+      x: center.x,
+      y,
+      width: boxWidth - 20,
+      height: boxHeight - 20,
+      text: step,
+      fontSize: 16,
+      color: 'black',
+    });
+  });
+
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+  
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  console.log(`[createFlowchart] Created flowchart with ${createdShapeIds.length} shapes`);
+  return createdShapeIds;
+}
+
+// ==========================================
+// SELECTION & QUERY FUNCTIONS (NEW - PR #7)
+// ==========================================
+
+/**
+ * Select all shapes of a specific type
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapeType - Type of shapes to select ('rectangle', 'ellipse', 'text', etc.)
+ * @returns Array of selected shape IDs
+ */
+export interface SelectShapesByTypeParams {
+  shapeType: string;
+}
+
+export function selectShapesByType(
+  editor: Editor,
+  params: SelectShapesByTypeParams
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { shapeType } = params;
+  
+  if (!shapeType) {
+    throw new Error('Shape type is required');
+  }
+
+  const allShapes = editor.getCurrentPageShapes();
+  const matchingShapes = allShapes.filter(shape => {
+    if (shape.type === 'geo') {
+      // For geo shapes, check the geo property
+      const geoType = (shape.props as { geo?: string }).geo;
+      return geoType === mapToTldrawGeoType(shapeType);
+    }
+    return shape.type === shapeType;
+  });
+
+  const matchingIds = matchingShapes.map(shape => shape.id);
+  
+  console.log(`[selectShapesByType] Selected ${matchingIds.length} shapes of type ${shapeType}`);
+  
+  if (matchingIds.length > 0) {
+    editor.select(...matchingIds);
+  }
+  
+  return matchingIds;
+}
+
+/**
+ * Find and select text shapes containing specific text
+ * 
+ * @param editor - tldraw editor instance
+ * @param searchText - Text to search for
+ * @returns Array of matching shape IDs
+ */
+export interface FindShapesByTextParams {
+  searchText: string;
+}
+
+export function findShapesByText(
+  editor: Editor,
+  params: FindShapesByTextParams
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { searchText } = params;
+  
+  if (!searchText) {
+    throw new Error('Search text is required');
+  }
+
+  const allShapes = editor.getCurrentPageShapes();
+  const matchingShapes = allShapes.filter(shape => {
+    if (shape.type === 'text') {
+      const textProps = shape.props as { richText?: { text: string } };
+      const text = textProps.richText?.text || '';
+      return text.toLowerCase().includes(searchText.toLowerCase());
+    }
+    // Also check geo shapes with text
+    if (shape.type === 'geo') {
+      const geoProps = shape.props as { text?: string };
+      const text = geoProps.text || '';
+      return text.toLowerCase().includes(searchText.toLowerCase());
+    }
+    return false;
+  });
+
+  const matchingIds = matchingShapes.map(shape => shape.id);
+  
+  console.log(`[findShapesByText] Found ${matchingIds.length} shapes containing "${searchText}"`);
+  
+  if (matchingIds.length > 0) {
+    editor.select(...matchingIds);
+  }
+  
+  return matchingIds;
+}
+
+/**
+ * Duplicate shapes with offset
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapeIds - Array of shape IDs to duplicate (optional, defaults to selected shapes)
+ * @param offsetX - Horizontal offset for duplicates (default: 50)
+ * @param offsetY - Vertical offset for duplicates (default: 50)
+ * @returns Array of new shape IDs
+ */
+export interface DuplicateShapesParams {
+  shapeIds?: TLShapeId[];
+  offsetX?: number;
+  offsetY?: number;
+}
+
+export function duplicateShapes(
+  editor: Editor,
+  params: DuplicateShapesParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { shapeIds, offsetX = 50, offsetY = 50 } = params;
+  
+  // Determine which shapes to duplicate
+  let targetShapes: typeof editor.getCurrentPageShapes extends () => infer R ? R : never;
+  if (shapeIds && shapeIds.length > 0) {
+    targetShapes = shapeIds.map(id => editor.getShape(id)).filter(Boolean) as typeof targetShapes;
+  } else {
+    targetShapes = editor.getSelectedShapes();
+  }
+
+  if (targetShapes.length === 0) {
+    throw new Error('No shapes selected to duplicate');
+  }
+
+  console.log(`[duplicateShapes] Duplicating ${targetShapes.length} shapes with offset (${offsetX}, ${offsetY})`);
+
+  // Use tldraw's duplicate API and then move the duplicates
+  editor.duplicateShapes(targetShapes.map(s => s.id));
+  
+  // Get the newly created shapes (they will be selected after duplication)
+  const newShapes = editor.getSelectedShapes();
+  const newShapeIds = newShapes.map(s => s.id);
+  
+  // Apply offset to duplicated shapes
+  newShapes.forEach(shape => {
+    editor.updateShape({
+      id: shape.id,
+      type: shape.type,
+      x: shape.x + offsetX,
+      y: shape.y + offsetY,
+    });
+  });
+
+  return newShapeIds;
+}
+
+// ==========================================
+// ALIGNMENT & DISTRIBUTION FUNCTIONS (NEW - PR #7)
+// ==========================================
+
+/**
+ * Align shapes relative to each other
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapeIds - Array of shape IDs to align (optional, defaults to selected shapes)
+ * @param alignment - Alignment type: 'left', 'center', 'right', 'top', 'middle', 'bottom'
+ * @returns void
+ */
+export interface AlignShapesParams {
+  shapeIds?: TLShapeId[];
+  alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+}
+
+export function alignShapes(
+  editor: Editor,
+  params: AlignShapesParams
+): void {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { shapeIds, alignment } = params;
+  
+  if (!alignment) {
+    throw new Error('Alignment type is required');
+  }
+
+  // Determine which shapes to align
+  let targetShapes: typeof editor.getCurrentPageShapes extends () => infer R ? R : never;
+  if (shapeIds && shapeIds.length > 0) {
+    targetShapes = shapeIds.map(id => editor.getShape(id)).filter(Boolean) as typeof targetShapes;
+  } else {
+    targetShapes = editor.getSelectedShapes();
+  }
+
+  if (targetShapes.length < 2) {
+    throw new Error('Need at least 2 shapes to align');
+  }
+
+  console.log(`[alignShapes] Aligning ${targetShapes.length} shapes to ${alignment}`);
+
+  // Calculate bounds
+  const bounds = targetShapes.map(shape => ({
+    id: shape.id,
+    x: shape.x,
+    y: shape.y,
+    w: (shape.props as { w?: number }).w || 100,
+    h: (shape.props as { h?: number }).h || 100,
+  }));
+
+  // Calculate alignment reference
+  let alignValue: number;
+  
+  switch (alignment) {
+    case 'left':
+      alignValue = Math.min(...bounds.map(b => b.x));
+      bounds.forEach((b, i) => {
+        editor.updateShape({
+          id: b.id,
+          type: targetShapes[i].type,
+          x: alignValue,
+        });
+      });
+      break;
+      
+    case 'center':
+      alignValue = bounds.reduce((sum, b) => sum + b.x + b.w / 2, 0) / bounds.length;
+      bounds.forEach((b, i) => {
+        editor.updateShape({
+          id: b.id,
+          type: targetShapes[i].type,
+          x: alignValue - b.w / 2,
+        });
+      });
+      break;
+      
+    case 'right':
+      alignValue = Math.max(...bounds.map(b => b.x + b.w));
+      bounds.forEach((b, i) => {
+        editor.updateShape({
+          id: b.id,
+          type: targetShapes[i].type,
+          x: alignValue - b.w,
+        });
+      });
+      break;
+      
+    case 'top':
+      alignValue = Math.min(...bounds.map(b => b.y));
+      bounds.forEach((b, i) => {
+        editor.updateShape({
+          id: b.id,
+          type: targetShapes[i].type,
+          y: alignValue,
+        });
+      });
+      break;
+      
+    case 'middle':
+      alignValue = bounds.reduce((sum, b) => sum + b.y + b.h / 2, 0) / bounds.length;
+      bounds.forEach((b, i) => {
+        editor.updateShape({
+          id: b.id,
+          type: targetShapes[i].type,
+          y: alignValue - b.h / 2,
+        });
+      });
+      break;
+      
+    case 'bottom':
+      alignValue = Math.max(...bounds.map(b => b.y + b.h));
+      bounds.forEach((b, i) => {
+        editor.updateShape({
+          id: b.id,
+          type: targetShapes[i].type,
+          y: alignValue - b.h,
+        });
+      });
+      break;
+  }
+}
+
+/**
+ * Distribute shapes evenly
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapeIds - Array of shape IDs to distribute (optional, defaults to selected shapes)
+ * @param direction - Distribution direction: 'horizontal' or 'vertical'
+ * @returns void
+ */
+export interface DistributeShapesParams {
+  shapeIds?: TLShapeId[];
+  direction: 'horizontal' | 'vertical';
+}
+
+export function distributeShapes(
+  editor: Editor,
+  params: DistributeShapesParams
+): void {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { shapeIds, direction } = params;
+  
+  if (!direction) {
+    throw new Error('Direction is required');
+  }
+
+  // Determine which shapes to distribute
+  let targetShapes: typeof editor.getCurrentPageShapes extends () => infer R ? R : never;
+  if (shapeIds && shapeIds.length > 0) {
+    targetShapes = shapeIds.map(id => editor.getShape(id)).filter(Boolean) as typeof targetShapes;
+  } else {
+    targetShapes = editor.getSelectedShapes();
+  }
+
+  if (targetShapes.length < 3) {
+    throw new Error('Need at least 3 shapes to distribute');
+  }
+
+  console.log(`[distributeShapes] Distributing ${targetShapes.length} shapes ${direction}ly`);
+
+  // Get bounds
+  const bounds = targetShapes.map(shape => ({
+    id: shape.id,
+    shape,
+    x: shape.x,
+    y: shape.y,
+    w: (shape.props as { w?: number }).w || 100,
+    h: (shape.props as { h?: number }).h || 100,
+  }));
+
+  if (direction === 'horizontal') {
+    // Sort by x position
+    bounds.sort((a, b) => a.x - b.x);
+    
+    const leftMost = bounds[0].x;
+    const rightMost = bounds[bounds.length - 1].x + bounds[bounds.length - 1].w;
+    const totalGap = rightMost - leftMost - bounds.reduce((sum, b) => sum + b.w, 0);
+    const gap = totalGap / (bounds.length - 1);
+    
+    let currentX = leftMost;
+    bounds.forEach((b, i) => {
+      if (i > 0) { // Skip first (it's already positioned)
+        currentX += gap;
+      }
+      if (i > 0 && i < bounds.length - 1) { // Don't move first or last
+        editor.updateShape({
+          id: b.id,
+          type: b.shape.type,
+          x: currentX,
+        });
+      }
+      currentX += b.w;
+    });
+  } else {
+    // Sort by y position
+    bounds.sort((a, b) => a.y - b.y);
+    
+    const topMost = bounds[0].y;
+    const bottomMost = bounds[bounds.length - 1].y + bounds[bounds.length - 1].h;
+    const totalGap = bottomMost - topMost - bounds.reduce((sum, b) => sum + b.h, 0);
+    const gap = totalGap / (bounds.length - 1);
+    
+    let currentY = topMost;
+    bounds.forEach((b, i) => {
+      if (i > 0) { // Skip first (it's already positioned)
+        currentY += gap;
+      }
+      if (i > 0 && i < bounds.length - 1) { // Don't move first or last
+        editor.updateShape({
+          id: b.id,
+          type: b.shape.type,
+          y: currentY,
+        });
+      }
+      currentY += b.h;
+    });
+  }
+}
+
+// ==========================================
+// DIAGRAM & WIREFRAME FUNCTIONS (NEW - PR #7)
+// ==========================================
+
+/**
+ * Create a complete page wireframe
+ * 
+ * @param editor - tldraw editor instance
+ * @param pageTitle - Title for the page (default: 'Page Title')
+ * @returns Array of created shape IDs
+ */
+export interface CreateWireframeParams {
+  pageTitle?: string;
+}
+
+export function createWireframe(
+  editor: Editor,
+  params: CreateWireframeParams = {}
+): TLShapeId[] {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const {
+    pageTitle = 'Page Title',
+  } = params;
+
+  console.log(`[createWireframe] Creating page wireframe with title: "${pageTitle}"`);
+
+  const center = getViewportCenter(editor);
+  
+  const pageWidth = 900;
+  const pageHeight = 700;
+  const headerHeight = 80;
+  const sidebarWidth = 200;
+  const footerHeight = 60;
+
+  const shapes: ShapeDefinition[] = [
+    // Page container
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y,
+      width: pageWidth,
+      height: pageHeight,
+      color: 'grey',
+    },
+    // Header
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y - pageHeight / 2 + headerHeight / 2,
+      width: pageWidth,
+      height: headerHeight,
+      color: 'blue',
+    },
+    // Header text
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y - pageHeight / 2 + headerHeight / 2,
+      width: 400,
+      height: 50,
+      text: pageTitle,
+      fontSize: 24,
+      color: 'white',
+    },
+    // Sidebar
+    {
+      shapeType: 'rectangle',
+      x: center.x - pageWidth / 2 + sidebarWidth / 2,
+      y: center.y + headerHeight / 2 - footerHeight / 2,
+      width: sidebarWidth,
+      height: pageHeight - headerHeight - footerHeight,
+      color: 'light-blue',
+    },
+    // Sidebar label
+    {
+      shapeType: 'text',
+      x: center.x - pageWidth / 2 + sidebarWidth / 2,
+      y: center.y - pageHeight / 2 + headerHeight + 40,
+      width: sidebarWidth - 20,
+      height: 30,
+      text: 'Navigation',
+      fontSize: 16,
+      color: 'black',
+    },
+    // Main content area
+    {
+      shapeType: 'rectangle',
+      x: center.x + sidebarWidth / 2,
+      y: center.y + headerHeight / 2 - footerHeight / 2,
+      width: pageWidth - sidebarWidth,
+      height: pageHeight - headerHeight - footerHeight,
+      color: 'light-green',
+    },
+    // Content label
+    {
+      shapeType: 'text',
+      x: center.x + sidebarWidth / 2,
+      y: center.y - pageHeight / 2 + headerHeight + 40,
+      width: 300,
+      height: 30,
+      text: 'Main Content Area',
+      fontSize: 18,
+      color: 'black',
+    },
+    // Footer
+    {
+      shapeType: 'rectangle',
+      x: center.x,
+      y: center.y + pageHeight / 2 - footerHeight / 2,
+      width: pageWidth,
+      height: footerHeight,
+      color: 'violet',
+    },
+    // Footer text
+    {
+      shapeType: 'text',
+      x: center.x,
+      y: center.y + pageHeight / 2 - footerHeight / 2,
+      width: 400,
+      height: 40,
+      text: 'Footer - © 2024',
+      fontSize: 14,
+      color: 'white',
+    },
+  ];
+
+  const createdShapeIds = createMultiShapeLayout(editor, shapes);
+  
+  if (createdShapeIds.length > 0) {
+    editor.select(...createdShapeIds);
+  }
+
+  console.log(`[createWireframe] Created wireframe with ${createdShapeIds.length} shapes`);
+  return createdShapeIds;
+}

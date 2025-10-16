@@ -4,6 +4,7 @@
  */
 
 import type { Editor, TLShape, TLShapeId, TLStoreEventInfo } from "@tldraw/tldraw";
+import { getSnapshot, loadSnapshot as tldrawLoadSnapshot } from "@tldraw/tldraw";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -12,6 +13,8 @@ import {
   getAllShapes,
   listenToShapes,
   writeShapeToFirestore,
+  loadSnapshot,
+  saveSnapshot,
 } from "../lib/firestoreSync";
 import { debounce } from "../lib/utils";
 
@@ -60,6 +63,7 @@ export function useShapes({
    * Each shape has its own debounce timer to prevent cancellation
    */
   const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const snapshotTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const writeShapeDebounced = useRef((shape: TLShape, uid: string, room: string) => {
     // Clear existing timer for THIS specific shape
@@ -83,6 +87,27 @@ export function useShapes({
   }).current;
 
   /**
+   * Save full snapshot (debounced) to persist pages and document state
+   * This runs less frequently than shape updates (every 5 seconds)
+   */
+  const saveSnapshotDebounced = useRef((ed: Editor, uid: string, room: string) => {
+    if (snapshotTimerRef.current) {
+      clearTimeout(snapshotTimerRef.current);
+    }
+    
+    snapshotTimerRef.current = setTimeout(async () => {
+      try {
+        // Use getSnapshot() function to get document state
+        const { document } = getSnapshot(ed.store);
+        await saveSnapshot(room, { document, session: {} } as any, uid);
+        console.log('[useShapes] Snapshot saved (includes pages)');
+      } catch (err) {
+        console.error("[useShapes] Error saving snapshot:", err);
+      }
+    }, 5000); // 5 second debounce for full snapshots
+  }).current;
+
+  /**
    * Load initial shapes from Firestore on mount
    */
   useEffect(() => {
@@ -94,45 +119,58 @@ export function useShapes({
 
     const loadInitialShapes = async (): Promise<void> => {
       try {
-        console.log('[useShapes] Loading initial shapes from Firestore...');
+        console.log('[useShapes] Loading initial data from Firestore...');
         isSyncingRef.current = true;
         setIsSyncing(true);
-        const shapes = await getAllShapes(roomId);
         
-        console.log(`[useShapes] Loaded ${shapes.length} shapes from Firestore`);
+        // Try to load full snapshot first (includes pages + shapes)
+        const snapshot = await loadSnapshot(roomId);
+        
+        if (snapshot && isMounted) {
+          console.log('[useShapes] Restoring from snapshot (includes pages)');
+          // Load full snapshot which includes pages and shapes
+          // Use loadSnapshot() function, not editor method
+          tldrawLoadSnapshot(editor.store, snapshot);
+          console.log('[useShapes] Snapshot restored successfully');
+        } else {
+          // Fallback: load individual shapes (backward compatibility)
+          console.log('[useShapes] No snapshot found, loading individual shapes');
+          const shapes = await getAllShapes(roomId);
+          console.log(`[useShapes] Loaded ${shapes.length} shapes from Firestore`);
 
-        if (!isMounted) {
-          isSyncingRef.current = false;
-          setIsSyncing(false);
-          return;
+          if (!isMounted) {
+            isSyncingRef.current = false;
+            setIsSyncing(false);
+            return;
+          }
+
+          // Apply shapes to editor using mergeRemoteChanges to avoid triggering listeners
+          editor.store.mergeRemoteChanges(() => {
+            shapes.forEach((firestoreShape) => {
+              const tldrawShape = firestoreShapeToTldraw(firestoreShape);
+              try {
+                editor.createShape(tldrawShape as TLShape);
+                console.log('[useShapes] Restored shape:', {
+                  id: firestoreShape.id,
+                  type: firestoreShape.type,
+                });
+              } catch (err) {
+                // Shape might already exist or be invalid
+                if (process.env.NODE_ENV === "development") {
+                  console.warn("[useShapes] Could not create shape:", err);
+                }
+              }
+            });
+          });
         }
 
-        // Apply shapes to editor using mergeRemoteChanges to avoid triggering listeners
-        editor.store.mergeRemoteChanges(() => {
-          shapes.forEach((firestoreShape) => {
-            const tldrawShape = firestoreShapeToTldraw(firestoreShape);
-            try {
-              editor.createShape(tldrawShape as TLShape);
-              console.log('[useShapes] Restored shape:', {
-                id: firestoreShape.id,
-                type: firestoreShape.type,
-              });
-            } catch (err) {
-              // Shape might already exist or be invalid
-              if (process.env.NODE_ENV === "development") {
-                console.warn("[useShapes] Could not create shape:", err);
-              }
-            }
-          });
-        });
-
-        console.log('[useShapes] Initial shape load complete');
+        console.log('[useShapes] Initial data load complete');
         isSyncingRef.current = false;
         setIsSyncing(false);
       } catch (err) {
-        console.error("[useShapes] Error loading initial shapes:", err);
+        console.error("[useShapes] Error loading initial data:", err);
         if (isMounted) {
-          setError(err instanceof Error ? err : new Error("Failed to load shapes"));
+          setError(err instanceof Error ? err : new Error("Failed to load data"));
         }
         isSyncingRef.current = false;
         setIsSyncing(false);
@@ -178,6 +216,20 @@ export function useShapes({
           updated: updatedCount,
           removed: removedCount,
         });
+      }
+
+      // Check for page changes (add, update, remove)
+      let hasPageChanges = false;
+      [...Object.values(event.changes.added), ...Object.values(event.changes.updated).map(([, to]) => to), ...Object.values(event.changes.removed)].forEach((record) => {
+        if (record.typeName === "page") {
+          hasPageChanges = true;
+        }
+      });
+
+      // If pages changed, save full snapshot (includes pages + shapes)
+      if (hasPageChanges) {
+        console.log('[useShapes] Page change detected, saving snapshot');
+        saveSnapshotDebounced(editor, userId, roomId);
       }
 
       // Process added shapes

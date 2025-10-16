@@ -235,8 +235,15 @@ export async function deleteRoom(
     // Delete shapes collection
     const shapesRef = collection(db, "rooms", roomId, "shapes");
     const shapesSnapshot = await getDocs(shapesRef);
-    const deletePromises = shapesSnapshot.docs.map((doc) => deleteDoc(doc.ref));
-    await Promise.all(deletePromises);
+    const shapeDeletePromises = shapesSnapshot.docs.map((doc) => deleteDoc(doc.ref));
+    
+    // Delete snapshot collection
+    const snapshotRef = collection(db, "rooms", roomId, "snapshot");
+    const snapshotSnapshot = await getDocs(snapshotRef);
+    const snapshotDeletePromises = snapshotSnapshot.docs.map((doc) => deleteDoc(doc.ref));
+    
+    // Execute all deletions in parallel
+    await Promise.all([...shapeDeletePromises, ...snapshotDeletePromises]);
 
     // Delete from RTDB (presence, cursors, access)
     const roomRtdbRef = ref(realtimeDb, `rooms/${roomId}`);

@@ -4,21 +4,26 @@
       ".read": "auth != null",
       "$uid": {
         ".read": "auth != null",
-        ".write": "$uid === auth.uid",
-        "online": {
-          ".write": "$uid === auth.uid"
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "rooms": {
+      "$roomId": {
+        "presence": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "$uid === auth.uid"
+          }
         },
-        "lastSeen": {
-          ".write": "$uid === auth.uid"
+        "cursors": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "$uid === auth.uid"
+          }
         },
-        "name": {
-          ".write": "$uid === auth.uid"
-        },
-        "color": {
-          ".write": "$uid === auth.uid"
-        },
-        "cursor": {
-          ".write": "$uid === auth.uid"
+        "access": {
+          ".read": "auth != null",
+          ".write": "auth != null"
         }
       }
     }

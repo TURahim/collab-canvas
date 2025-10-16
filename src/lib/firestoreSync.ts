@@ -1,15 +1,18 @@
 /**
  * Firestore Shape Sync
  * Handles persistent shape storage and real-time synchronization
+ * Supports both snapshot-based (full document) and incremental (individual shapes) sync
  */
 
 import type { DocumentChange, QuerySnapshot, Timestamp } from "firebase/firestore";
-import type { TLShape } from "@tldraw/tldraw";
+import type { TLShape, TLStoreSnapshot } from "@tldraw/tldraw";
+import { getSnapshot } from "@tldraw/tldraw";
 import {
   collection,
   deleteDoc,
   doc,
   getDocs,
+  getDoc,
   onSnapshot,
   query,
   serverTimestamp,
@@ -251,6 +254,64 @@ export async function getAllShapes(roomId: string): Promise<FirestoreShape[]> {
   } catch (error) {
     console.error("[FirestoreSync] Error getting all shapes:", error);
     return [];
+  }
+}
+
+/**
+ * Save full tldraw document snapshot to Firestore
+ * Includes all pages, shapes, and document state
+ * 
+ * @param roomId - Room identifier
+ * @param snapshot - Full tldraw store snapshot
+ * @param userId - ID of user saving snapshot
+ * @returns Promise that resolves when save is complete
+ */
+export async function saveSnapshot(
+  roomId: string,
+  snapshot: TLStoreSnapshot,
+  userId: string
+): Promise<void> {
+  try {
+    const snapshotRef = doc(db, `rooms/${roomId}/snapshot`, "doc");
+    
+    await setDoc(snapshotRef, {
+      snapshot: JSON.stringify(snapshot),
+      savedBy: userId,
+      savedAt: serverTimestamp(),
+    });
+    
+    console.log("[FirestoreSync] Snapshot saved successfully");
+  } catch (error) {
+    console.error("[FirestoreSync] Error saving snapshot:", error);
+    throw error;
+  }
+}
+
+/**
+ * Load full tldraw document snapshot from Firestore
+ * Returns null if no snapshot exists
+ * 
+ * @param roomId - Room identifier
+ * @returns Promise resolving to snapshot or null
+ */
+export async function loadSnapshot(roomId: string): Promise<TLStoreSnapshot | null> {
+  try {
+    const snapshotRef = doc(db, `rooms/${roomId}/snapshot`, "doc");
+    const snapshotDoc = await getDoc(snapshotRef);
+    
+    if (!snapshotDoc.exists()) {
+      console.log("[FirestoreSync] No snapshot found for room");
+      return null;
+    }
+    
+    const data = snapshotDoc.data();
+    const snapshot = JSON.parse(data.snapshot) as TLStoreSnapshot;
+    
+    console.log("[FirestoreSync] Snapshot loaded successfully");
+    return snapshot;
+  } catch (error) {
+    console.error("[FirestoreSync] Error loading snapshot:", error);
+    return null;
   }
 }
 

@@ -226,13 +226,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
 
       {/* Canvas container with top padding for header */}
       <div className={roomMetadata ? "fixed inset-0 pt-14 md:pt-16" : "fixed inset-0"}>
-        <Tldraw 
-          onMount={handleEditorMount} 
-          licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
-          components={{
-            PageMenu: null,  // Hide multi-page UI to keep single page per room
-          }}
-        />
+        <Tldraw onMount={handleEditorMount} licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY} />
         <Cursors editor={editor} remoteCursors={remoteCursors} />
         <UserList
           currentUserId={user?.uid ?? null}

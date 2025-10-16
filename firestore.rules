@@ -42,5 +42,18 @@ service cloud.firestore {
       // Allow users to delete shapes (any authenticated user for collaborative editing)
       allow delete: if request.auth != null;
     }
+    
+    // Room-based snapshot storage (full document state with pages)
+    match /rooms/{roomId}/snapshot/{doc} {
+      // Allow authenticated users to read room snapshot
+      allow read: if request.auth != null;
+      
+      // Allow authenticated users to save snapshots
+      allow create, update: if request.auth != null
+        && request.resource.data.savedBy is string;
+      
+      // Allow users to delete snapshots (for room cleanup)
+      allow delete: if request.auth != null;
+    }
   }
 }

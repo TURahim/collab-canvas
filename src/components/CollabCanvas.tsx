@@ -11,7 +11,7 @@ import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
 import { getRoomMetadata } from "../lib/roomManagement";
 import { getRoomsPath } from "../lib/paths";
-import { checkRoomBan } from "../lib/realtimeSync";
+import { checkRoomBan, listenForRoomBan } from "../lib/realtimeSync";
 import type { RoomMetadata } from "../types/room";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
@@ -109,6 +109,25 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
 
     void initializeRoom();
   }, [user, propRoomId, router]);
+
+  /**
+   * Listen for ban notifications - if this user gets kicked, redirect them
+   */
+  useEffect(() => {
+    if (!user || !roomId) {
+      return;
+    }
+
+    const unsubscribe = listenForRoomBan(roomId, user.uid, (bannedUntil) => {
+      const remainingTime = Math.ceil((bannedUntil - Date.now()) / 1000 / 60);
+      alert(`You were removed from this room by the owner. You cannot rejoin for ${remainingTime} minute(s).`);
+      router.push(getRoomsPath());
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, roomId, router]);
 
   /**
    * Editor mount handler - called when tldraw editor is initialized

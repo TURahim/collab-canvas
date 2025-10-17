@@ -315,8 +315,10 @@ export function setupPresenceHeartbeat(userId: string): NodeJS.Timeout {
 }
 
 /**
- * Kicks a user from a room by removing their presence and setting a temporary ban
+ * Kicks a user from a room by setting a temporary ban
  * Ban duration is 5 minutes to prevent immediate rejoining
+ * Note: We can only write the ban record - the kicked user's client will detect it
+ * and handle their own disconnect when they receive the ban notification
  * 
  * @param roomId - Room ID from which to kick the user
  * @param targetUserId - User ID to kick
@@ -337,6 +339,7 @@ export async function kickUserFromRoom(
     const bannedUntil = Date.now() + BAN_DURATION_MS;
 
     // Write ban record to RTDB
+    // The kicked user's client will detect this and disconnect themselves
     const banRef = ref(realtimeDb, `rooms/${roomId}/bans/${targetUserId}`);
     await update(banRef, {
       bannedUntil,
@@ -344,18 +347,7 @@ export async function kickUserFromRoom(
       bannedAt: serverTimestamp(),
     });
 
-    // Force user offline by marking them offline in global presence
-    const userRef = ref(realtimeDb, `users/${targetUserId}`);
-    await update(userRef, {
-      online: false,
-      lastSeen: serverTimestamp(),
-    });
-
-    // Remove cursor
-    const cursorRef = ref(realtimeDb, `users/${targetUserId}/cursor`);
-    await remove(cursorRef);
-
-    console.log(`[RealtimeSync] User ${targetUserId} kicked from room ${roomId} by ${kickedBy}`);
+    console.log(`[RealtimeSync] User ${targetUserId} banned from room ${roomId} by ${kickedBy}`);
   } catch (error) {
     console.error("[RealtimeSync] Error kicking user:", error);
     throw error;
@@ -363,7 +355,7 @@ export async function kickUserFromRoom(
 }
 
 /**
- * Checks if a user is currently banned from a room
+ * Checks if a user is currently banned from a room (one-time check)
  * 
  * @param roomId - Room ID to check
  * @param userId - User ID to check
@@ -400,5 +392,52 @@ export async function checkRoomBan(
     console.error("[RealtimeSync] Error checking room ban:", error);
     return null;
   }
+}
+
+/**
+ * Listens for ban notifications for the current user in a specific room
+ * Calls callback when user gets banned
+ * 
+ * @param roomId - Room ID to monitor
+ * @param userId - User ID to monitor
+ * @param onBanned - Callback called when user is banned, receives bannedUntil timestamp
+ * @returns Unsubscribe function to stop listening
+ */
+export function listenForRoomBan(
+  roomId: string,
+  userId: string,
+  onBanned: (bannedUntil: number) => void
+): () => void {
+  if (!roomId || !userId) {
+    return () => {};
+  }
+
+  const banRef = ref(realtimeDb, `rooms/${roomId}/bans/${userId}`);
+
+  const handleSnapshot = (snapshot: DataSnapshot): void => {
+    if (!snapshot.exists()) {
+      return;
+    }
+
+    const banData = snapshot.val() as { bannedUntil: number; bannedBy: string };
+    const bannedUntil = banData.bannedUntil;
+
+    // Check if ban is still active
+    if (bannedUntil && bannedUntil > Date.now()) {
+      console.log(`[RealtimeSync] ⚠️ User ${userId} was banned from room ${roomId}`);
+      onBanned(bannedUntil);
+    }
+  };
+
+  const handleError = (error: Error): void => {
+    // Permission errors expected if not authenticated
+    if (!error.message?.includes("PERMISSION_DENIED")) {
+      console.error("[RealtimeSync] Error listening for ban:", error);
+    }
+  };
+
+  const unsubscribe = onValue(banRef, handleSnapshot, handleError);
+
+  return unsubscribe;
 }
 

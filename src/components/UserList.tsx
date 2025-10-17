@@ -45,6 +45,7 @@ export default function UserList({
   const { signOutUser } = useAuth();
   const { onlineUsers, currentUser, userCount, error } = usePresence({
     currentUserId,
+    roomId, // Pass roomId for room-scoped presence
     enabled: !!currentUserId,
   });
   const [kickingUserId, setKickingUserId] = useState<string | null>(null);
@@ -56,8 +57,24 @@ export default function UserList({
   // Filter out kicked users from the display (optimistic UI update)
   const visibleOnlineUsers = onlineUsers.filter((user) => {
     const userWithId = user as typeof user & { uid?: string };
-    return !userWithId.uid || !kickedUserIds.has(userWithId.uid);
+    const shouldShow = !userWithId.uid || !kickedUserIds.has(userWithId.uid);
+    
+    if (!shouldShow && process.env.NODE_ENV === 'development') {
+      console.log('[UserList] 🚫 Hiding kicked user:', { uid: userWithId.uid, name: user.name });
+    }
+    
+    return shouldShow;
   });
+
+  // Debug: log user counts
+  if (process.env.NODE_ENV === 'development' && kickedUserIds.size > 0) {
+    console.log('[UserList] 📊 User counts:', {
+      total: onlineUsers.length,
+      visible: visibleOnlineUsers.length,
+      kicked: kickedUserIds.size,
+      kickedIds: Array.from(kickedUserIds),
+    });
+  }
 
   if (error) {
     console.error("[UserList] Presence error:", error);
@@ -80,8 +97,14 @@ export default function UserList({
    * Kick a user from the room (owner only)
    */
   const handleKickUser = async (targetUserId: string, targetUserName: string): Promise<void> => {
+    console.log('[UserList] 🎯 Kick requested:', { targetUserId, targetUserName, currentUserId, roomId, isOwner });
+    
     if (!currentUserId || !roomId || !isOwner) {
-      console.error("[UserList] Cannot kick: missing permissions or room info");
+      console.error("[UserList] ❌ Cannot kick: missing permissions or room info", {
+        hasCurrentUserId: !!currentUserId,
+        hasRoomId: !!roomId,
+        isOwner,
+      });
       return;
     }
 
@@ -91,19 +114,29 @@ export default function UserList({
     );
 
     if (!confirmed) {
+      console.log('[UserList] Kick cancelled by user');
       return;
     }
 
     try {
       setKickingUserId(targetUserId);
+      console.log('[UserList] 📝 Writing ban record to database...');
+      
       await kickUserFromRoom(roomId, targetUserId, currentUserId);
       
-      // Optimistically remove from UI immediately
-      setKickedUserIds(prev => new Set([...prev, targetUserId]));
+      console.log('[UserList] ✅ Ban record written successfully');
       
-      console.log(`[UserList] Successfully kicked user ${targetUserId}`);
+      // Optimistically remove from UI immediately
+      setKickedUserIds(prev => {
+        const newSet = new Set([...prev, targetUserId]);
+        console.log('[UserList] 🎨 Optimistic UI update - hiding user:', targetUserId);
+        console.log('[UserList] Kicked users set:', Array.from(newSet));
+        return newSet;
+      });
+      
+      console.log(`[UserList] ✅ Successfully kicked user ${targetUserId}`);
     } catch (err) {
-      console.error("[UserList] Error kicking user:", err);
+      console.error("[UserList] ❌ Error kicking user:", err);
       alert("Failed to remove user. Please try again.");
     } finally {
       setKickingUserId(null);

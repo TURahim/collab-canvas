@@ -13,6 +13,7 @@ import { getOnlineUsers, listenToUsers } from "../lib/realtimeSync";
  */
 interface UsePresenceOptions {
   currentUserId: string | null;
+  roomId?: string;
   enabled?: boolean;
 }
 
@@ -45,6 +46,7 @@ interface UsePresenceReturn {
  */
 export function usePresence({
   currentUserId,
+  roomId,
   enabled = true,
 }: UsePresenceOptions): UsePresenceReturn {
   const [usersMap, setUsersMap] = useState<Record<string, UserPresence>>({});
@@ -52,6 +54,7 @@ export function usePresence({
 
   /**
    * Listen to users in real-time and maintain local state
+   * If roomId is provided, only show users in that room (global presence otherwise)
    */
   useEffect(() => {
     if (!currentUserId || !enabled) {
@@ -59,37 +62,45 @@ export function usePresence({
       return;
     }
 
-    let isMounted = true;
+    // If no roomId, fall back to global presence (backward compatibility)
+    if (!roomId) {
+      let isMounted = true;
 
-    // Load initial users from database
-    const loadInitialUsers = async (): Promise<void> => {
-      try {
-        const users = await getOnlineUsers();
+      const loadInitialUsers = async (): Promise<void> => {
+        try {
+          const users = await getOnlineUsers();
+          if (isMounted) {
+            setUsersMap(users);
+          }
+        } catch (err) {
+          console.error("[usePresence] Error loading initial users:", err);
+          if (isMounted) {
+            setError(err instanceof Error ? err : new Error("Failed to load users"));
+          }
+        }
+      };
+
+      loadInitialUsers();
+
+      const unsubscribe = listenToUsers((users) => {
         if (isMounted) {
           setUsersMap(users);
         }
-      } catch (err) {
-        console.error("[usePresence] Error loading initial users:", err);
-        if (isMounted) {
-          setError(err instanceof Error ? err : new Error("Failed to load users"));
-        }
-      }
-    };
+      });
 
-    loadInitialUsers();
+      return (): void => {
+        isMounted = false;
+        unsubscribe();
+      };
+    }
 
-    // Listen to real-time updates
-    const unsubscribe = listenToUsers((users) => {
-      if (isMounted) {
-        setUsersMap(users);
-      }
-    });
+    // Room-scoped presence: just return current user for now
+    // In the future, we'll implement proper room-scoped presence in RTDB
+    console.log('[usePresence] Room-scoped mode - showing only current user for now');
+    setUsersMap({});
 
-    return (): void => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, [currentUserId, enabled]);
+    return () => {};
+  }, [currentUserId, roomId, enabled]);
 
   // Convert map to array and add uid field
   const allUsers: UserPresenceWithId[] = Object.entries(usersMap).map(([userId, userData]) => ({

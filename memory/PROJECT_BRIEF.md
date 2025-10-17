@@ -1,7 +1,7 @@
 # PROJECT BRIEF - CollabCanvas
 
-**Last Updated:** October 16, 2024  
-**Status:** PRs #5 & #6 Complete ✅ | Multi-Room Phase Active 🚀
+**Last Updated:** October 17, 2025  
+**Status:** All Core Features Complete ✅ | Multi-Feature Enhancement Delivered 🚀
 
 ---
 
@@ -19,6 +19,8 @@ Real-time collaborative whiteboard application where multiple users can simultan
 - Multi-user real-time synchronization (cursors + shapes)
 - **Room management UI** - create, configure, and share rooms
 - **Export to PNG/SVG** - download canvas with quality controls
+- **Owner kick control** - remove users with 5-minute ban ⭐ NEW
+- **Persistent image assets** - Firebase Storage integration ⭐ NEW
 - AI-powered canvas agent "Flippy" 🥞 for natural language manipulation
 - Production-grade authentication, presence awareness, and error handling
 
@@ -43,8 +45,9 @@ AI-first canvas manipulation + room-based collaboration - users can create compl
 
 **Backend:**
 - Firebase Authentication (Anonymous + Google Sign-In)
-- Firebase Realtime Database (cursor positions, presence)
-- Cloud Firestore (shape persistence, **room metadata**)
+- Firebase Realtime Database (cursor positions, presence, **bans** ⭐ NEW)
+- Cloud Firestore (shape persistence, **room metadata**, **asset metadata** ⭐ NEW)
+- Firebase Storage (persistent image assets, 10MB limit) ⭐ NEW
 - Server-side API proxy for OpenAI
 
 **AI Layer:**
@@ -104,7 +107,9 @@ AI-first canvas manipulation + room-based collaboration - users can create compl
 **Security Rules:**
 - ✔ Firestore: Room metadata with owner-only write access
 - ✔ Firestore: Shapes with authenticated read/write + field validation
-- ✔ Realtime DB: Room-scoped presence and cursors
+- ✔ Firestore: Asset metadata with field validation ⭐ NEW
+- ✔ Realtime DB: Room-scoped presence, cursors, and bans ⭐ NEW
+- ✔ Storage: Room-scoped assets with 10MB limit ⭐ NEW
 - ✔ API proxy: Server-side only, no client exposure
 
 **Secrets Status:**
@@ -260,19 +265,22 @@ pnpm test:coverage  # Coverage report
 **Status:** PRs #5 & #6 integrated successfully ✅
 
 **Recently Completed:**
-1. ✅ PR #5: Room Settings & Permissions UI (Agent A)
-2. ✅ PR #6: Export to PNG/SVG (Agent B)
-3. ✅ Integration testing and merge to main
-4. ✅ Firebase security rules updated and deployed
-5. ✅ Fixed room name validation issue
+1. ✅ PR #2: Online Users Card Repositioning
+2. ✅ PR #3: JellyBoard Logo on Rooms List
+3. ✅ PR #5: Keyboard Shortcuts Documentation
+4. ✅ PR #1: Owner Kick Control with 5-Minute Ban
+5. ✅ PR #4: Persistent Image Assets (Firebase Storage)
+6. ✅ Fixed Next.js config deprecation warnings
+7. ✅ Fixed Storage rules syntax errors
+8. ✅ Removed redundant loading text
 
 **Next PRs (Optional):**
-- PR #7: Keyboard Shortcuts (Agent A) - Add Ctrl+E for export
 - PR #8: Text Styling Panel (Agent B) - Floating text controls
+- CORS configuration for production
+- Mobile optimization improvements
 
 **Current Issues:**
-- ✅ Room name validation fixed (sanitized special characters)
-- ✅ Firebase permission errors resolved (rules deployed)
+- ⚠️ Minor CORS warnings for Firebase Storage (non-blocking, fixable for production)
 - No blocking issues
 
 ---

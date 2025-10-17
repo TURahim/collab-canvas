@@ -17,20 +17,20 @@ interface UsePresenceOptions {
 }
 
 /**
- * Return type for usePresence hook
- */
-interface UsePresenceReturn {
-  onlineUsers: UserPresence[];
-  currentUser: UserPresence | null;
-  userCount: number;
-  error: Error | null;
-}
-
-/**
  * Extended UserPresence with uid field
  */
 interface UserPresenceWithId extends UserPresence {
   uid: string;
+}
+
+/**
+ * Return type for usePresence hook
+ */
+interface UsePresenceReturn {
+  onlineUsers: UserPresenceWithId[];
+  currentUser: UserPresenceWithId | null;
+  userCount: number;
+  error: Error | null;
 }
 
 /**
@@ -39,6 +39,7 @@ interface UserPresenceWithId extends UserPresence {
  * - Filters for online users only
  * - Separates current user from others
  * - Provides user count
+ * - Includes uid field in returned user objects for kick functionality
  * 
  * @returns Object containing onlineUsers, currentUser, userCount, and error state
  */

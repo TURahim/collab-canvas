@@ -87,10 +87,7 @@ export default function RoomPage(): React.JSX.Element {
   if (loading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <LoadingSpinner />
-          <p className="mt-4 text-gray-600">Loading room...</p>
-        </div>
+        <LoadingSpinner />
       </div>
     );
   }

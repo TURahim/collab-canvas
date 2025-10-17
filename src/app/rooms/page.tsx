@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { collectionGroup, getDocs, query, where, limit, doc, getDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useAuth } from "../../hooks/useAuth";
@@ -183,8 +184,21 @@ export default function RoomsPage(): React.JSX.Element {
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Your Rooms</h1>
-              <p className="mt-1 text-sm text-gray-500">
+              <button
+                onClick={() => router.push('/rooms')}
+                className="focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg"
+                aria-label="JellyBoard Home"
+              >
+                <Image 
+                  src="/JellyBoardBanner.png" 
+                  alt="JellyBoard" 
+                  width={240} 
+                  height={60}
+                  priority
+                  className="h-12 w-auto"
+                />
+              </button>
+              <p className="mt-2 text-sm text-gray-500">
                 Create and join collaborative canvas rooms
               </p>
             </div>

@@ -55,5 +55,27 @@ service cloud.firestore {
       // Allow users to delete snapshots (for room cleanup)
       allow delete: if request.auth != null;
     }
+    
+    // Room-based asset storage (image metadata)
+    match /rooms/{roomId}/assets/{assetId} {
+      // Allow authenticated users to read asset metadata
+      allow read: if request.auth != null;
+      
+      // Allow authenticated users to create assets with validation
+      allow create: if request.auth != null
+        && request.resource.data.id is string
+        && request.resource.data.type == 'image'
+        && request.resource.data.src is string
+        && request.resource.data.mimeType is string
+        && request.resource.data.size is number
+        && request.resource.data.uploadedBy is string
+        && request.resource.data.roomId == roomId;
+      
+      // Allow authenticated users to update assets
+      allow update: if request.auth != null;
+      
+      // Allow authenticated users to delete assets (for cleanup)
+      allow delete: if request.auth != null;
+    }
   }
 }

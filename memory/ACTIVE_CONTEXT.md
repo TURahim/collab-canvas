@@ -1,7 +1,7 @@
 # ACTIVE CONTEXT - CollabCanvas
 
-**Last Updated:** October 16, 2025  
-**Session:** PR #1 Multi-Room Routing Implementation
+**Last Updated:** October 17, 2025  
+**Session:** Multi-Feature Enhancement (5 PRs)
 
 ---
 
@@ -9,17 +9,20 @@
 
 **Active Branch:** `main`  
 **Recent Changes:**
-- ✅ Implemented PR #1 (Multi-Room Routing)
-- ✅ Created room list and individual room pages
-- ✅ Deployed Firestore collection group rules and indexes
+- ✅ PR #2: Online Users Card Repositioning
+- ✅ PR #3: JellyBoard Logo on Rooms List
+- ✅ PR #5: Keyboard Shortcuts Documentation
+- ✅ PR #1: Owner Kick Control with 5-Minute Ban
+- ✅ PR #4: Persistent Image Assets (Firebase Storage)
+- ✅ Fixed Next.js config deprecation warnings
+- ✅ Fixed Storage rules syntax errors
+- ✅ Fixed asset detection for tldraw v4
 - ✅ Updated memory bank and README
 
 **Recent Commits:**
-- `805a8c5` - feat: implement PR #1 - Multi-Room Routing
-- `c2521c8` - fix: use collectionGroup for room metadata queries  
-- `8695f5c` - fix: correct collection group queries and rules
+- Not yet committed (awaiting user approval)
 
-**Status:** PR #1 Complete and Working ✅
+**Status:** All 5 PRs Complete and Working ✅
 
 ---
 
@@ -39,7 +42,7 @@ users/
       y: number          // Cursor Y position
     }
 
-// Future: Room-scoped presence (planned)
+// Room-scoped data
 rooms/
   {roomId}/
     presence/
@@ -49,6 +52,11 @@ rooms/
     access/
       isPublic: boolean
       owner: string
+    bans/                // ⭐ NEW - Owner kick control
+      {userId}/
+        bannedUntil: number    // Unix timestamp (5 min from ban)
+        bannedBy: string       // User ID who kicked
+        bannedAt: timestamp    // Server timestamp
 ```
 
 **Security Rules:**
@@ -100,6 +108,36 @@ rooms/
 - Read: All authenticated users
 - Create/Update: Authenticated + field validation (id, type, createdBy required)
 - Delete: All authenticated users (collaborative editing)
+
+### Firebase Storage (Image Assets) ⭐ NEW
+
+```javascript
+// Storage: /rooms/{roomId}/assets/{assetId}.{ext}
+// Firestore: /rooms/{roomId}/assets/{assetId}
+
+{
+  id: string,           // Asset ID (from tldraw)
+  type: "image",        // Asset type
+  src: string,          // Firebase Storage download URL
+  mimeType: string,     // "image/png", "image/jpeg", "image/gif", "image/webp"
+  size: number,         // File size in bytes
+  uploadedBy: string,   // User ID who uploaded
+  roomId: string,       // Room ID
+  createdAt: timestamp
+}
+```
+
+**Security Rules (Storage):**
+- Read: Authenticated users
+- Write: Authenticated + 10MB limit + image MIME type validation
+- Delete: Authenticated users
+
+**Security Rules (Firestore):**
+- Read: Authenticated users
+- Create: Authenticated + full field validation
+- Update/Delete: Authenticated users
+
+**Supported:** PNG, JPEG, GIF, WebP (10MB max)
 
 ---
 

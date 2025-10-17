@@ -5,8 +5,11 @@
 
 "use client";
 
+import { useState } from "react";
 import { usePresence } from "../hooks/usePresence";
 import { useAuth } from "../hooks/useAuth";
+import { kickUserFromRoom } from "../lib/realtimeSync";
+import type { RoomMetadata } from "../types/room";
 
 /**
  * Props for UserList component
@@ -15,6 +18,8 @@ interface UserListProps {
   currentUserId: string | null;
   currentUserName: string | null;
   currentUserColor: string;
+  roomId?: string;
+  roomMetadata?: RoomMetadata | null;
 }
 
 /**
@@ -34,12 +39,18 @@ export default function UserList({
   currentUserId,
   currentUserName,
   currentUserColor,
+  roomId,
+  roomMetadata,
 }: UserListProps): React.JSX.Element | null {
   const { signOutUser } = useAuth();
   const { onlineUsers, currentUser, userCount, error } = usePresence({
     currentUserId,
     enabled: !!currentUserId,
   });
+  const [kickingUserId, setKickingUserId] = useState<string | null>(null);
+
+  // Check if current user is room owner
+  const isOwner = roomMetadata && currentUserId ? roomMetadata.owner === currentUserId : false;
 
   if (error) {
     console.error("[UserList] Presence error:", error);
@@ -58,8 +69,38 @@ export default function UserList({
     }
   };
 
+  /**
+   * Kick a user from the room (owner only)
+   */
+  const handleKickUser = async (targetUserId: string, targetUserName: string): Promise<void> => {
+    if (!currentUserId || !roomId || !isOwner) {
+      console.error("[UserList] Cannot kick: missing permissions or room info");
+      return;
+    }
+
+    // Confirm kick action
+    const confirmed = window.confirm(
+      `Are you sure you want to remove "${targetUserName}" from this room? They will be unable to rejoin for 5 minutes.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setKickingUserId(targetUserId);
+      await kickUserFromRoom(roomId, targetUserId, currentUserId);
+      console.log(`[UserList] Successfully kicked user ${targetUserId}`);
+    } catch (err) {
+      console.error("[UserList] Error kicking user:", err);
+      alert("Failed to remove user. Please try again.");
+    } finally {
+      setKickingUserId(null);
+    }
+  };
+
   return (
-    <div className="fixed left-4 top-20 z-[100] w-64 pointer-events-auto">
+    <div className="fixed left-4 top-32 z-[100] w-64 pointer-events-auto">
       <div className="rounded-lg bg-white shadow-xl border border-gray-200">
         {/* Header */}
         <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 rounded-t-lg">
@@ -112,31 +153,59 @@ export default function UserList({
           {/* Other Users */}
           {onlineUsers.length > 0 ? (
             <div className="space-y-1">
-              {onlineUsers.map((user) => (
-                <div
-                  key={user.name}
-                  className="rounded-lg border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Color indicator */}
-                    <div
-                      className="h-8 w-8 flex-shrink-0 rounded-full border-2 border-gray-200 shadow-sm"
-                      style={{ backgroundColor: user.color }}
-                    />
-                    
-                    {/* User info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {user.name}
-                      </p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                        <span className="text-xs text-gray-500">Online</span>
+              {onlineUsers.map((user) => {
+                // Type guard to ensure user has uid field
+                const userWithId = user as typeof user & { uid?: string };
+                const userId = userWithId.uid;
+                
+                return (
+                  <div
+                    key={user.name}
+                    className="rounded-lg border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* Color indicator */}
+                      <div
+                        className="h-8 w-8 flex-shrink-0 rounded-full border-2 border-gray-200 shadow-sm"
+                        style={{ backgroundColor: user.color }}
+                      />
+                      
+                      {/* User info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {user.name}
+                        </p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <div className="h-2 w-2 rounded-full bg-green-500" />
+                          <span className="text-xs text-gray-500">Online</span>
+                        </div>
                       </div>
+
+                      {/* Kick button (owner only) */}
+                      {isOwner && userId && (
+                        <button
+                          onClick={() => void handleKickUser(userId, user.name)}
+                          disabled={kickingUserId === userId}
+                          className="flex-shrink-0 rounded-full p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          aria-label={`Remove ${user.name} from room`}
+                          title="Remove user from room"
+                        >
+                          {kickingUserId === userId ? (
+                            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                          ) : (
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="py-8 text-center">

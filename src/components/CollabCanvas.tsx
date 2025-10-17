@@ -11,6 +11,7 @@ import { useCursors } from "../hooks/useCursors";
 import { useShapes } from "../hooks/useShapes";
 import { getRoomMetadata } from "../lib/roomManagement";
 import { getRoomsPath } from "../lib/paths";
+import { checkRoomBan } from "../lib/realtimeSync";
 import type { RoomMetadata } from "../types/room";
 import AuthModal from "./AuthModal";
 import Cursors from "./Cursors";
@@ -70,7 +71,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
   }, []);
 
   /**
-   * Initialize room - load metadata for the current room
+   * Initialize room - load metadata and check for bans
    */
   useEffect(() => {
     const initializeRoom = async (): Promise<void> => {
@@ -83,6 +84,15 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
 
       try {
         setRoomId(propRoomId);
+
+        // Check if user is banned from this room
+        const bannedUntil = await checkRoomBan(propRoomId, user.uid);
+        if (bannedUntil) {
+          const remainingTime = Math.ceil((bannedUntil - Date.now()) / 1000 / 60);
+          alert(`You were removed from this room by the owner. You can rejoin in ${remainingTime} minute(s).`);
+          router.push(getRoomsPath());
+          return;
+        }
 
         const metadata = await getRoomMetadata(propRoomId);
         setRoomMetadata(metadata);
@@ -98,7 +108,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
     };
 
     void initializeRoom();
-  }, [user, propRoomId]);
+  }, [user, propRoomId, router]);
 
   /**
    * Editor mount handler - called when tldraw editor is initialized
@@ -232,6 +242,8 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
           currentUserId={user?.uid ?? null}
           currentUserName={user?.displayName ?? null}
           currentUserColor={user?.color ?? "#999999"}
+          roomId={roomId}
+          roomMetadata={roomMetadata}
         />
         
         {/* Status indicators */}

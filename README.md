@@ -201,6 +201,54 @@ CollabCanvas now supports **unlimited collaborative rooms** with complete routin
 
 ---
 
+## ⌨️ **Keyboard Shortcuts**
+
+CollabCanvas supports all standard **tldraw keyboard shortcuts** for efficient canvas navigation and editing. These native shortcuts provide a professional drawing experience:
+
+### **Navigation**
+- **Space + Drag** - Pan the canvas
+- **Ctrl/Cmd + Mouse Wheel** - Zoom in/out
+- **Ctrl/Cmd + 0** - Reset zoom to 100%
+- **Ctrl/Cmd + 1** - Zoom to fit all content
+- **Ctrl/Cmd + 2** - Zoom to selection
+
+### **Tools**
+- **V** - Select tool
+- **D** - Draw/Pencil tool
+- **R** - Rectangle tool
+- **O** - Ellipse tool
+- **A** - Arrow tool
+- **T** - Text tool
+- **N** - Note/Sticky tool
+- **L** - Line tool
+- **F** - Frame tool
+
+### **Editing**
+- **Ctrl/Cmd + Z** - Undo
+- **Ctrl/Cmd + Shift + Z** - Redo
+- **Ctrl/Cmd + C** - Copy
+- **Ctrl/Cmd + V** - Paste
+- **Ctrl/Cmd + X** - Cut
+- **Ctrl/Cmd + D** - Duplicate
+- **Ctrl/Cmd + A** - Select all
+- **Delete/Backspace** - Delete selected shapes
+- **Ctrl/Cmd + G** - Group selection
+- **Ctrl/Cmd + Shift + G** - Ungroup
+
+### **Arrangement**
+- **Ctrl/Cmd + ]** - Bring forward
+- **Ctrl/Cmd + [** - Send backward
+- **Ctrl/Cmd + Shift + ]** - Bring to front
+- **Ctrl/Cmd + Shift + [** - Send to back
+
+### **View**
+- **Ctrl/Cmd + Shift + H** - Toggle UI
+- **?** - Show keyboard shortcuts help
+
+All shortcuts work seamlessly with the real-time collaboration features!
+
+---
+
 ## 🏗️ **Tech Stack**
 
 ### **Frontend**
@@ -247,6 +295,7 @@ pnpm install
    - **Authentication** → Sign-in method → Enable "Anonymous"
    - **Realtime Database** → Create database (start in test mode)
    - **Firestore** → Create database (start in test mode)
+   - **Storage** → Get Started (test mode) - Required for image persistence
 
 3. **Get Config & Deploy Rules**
    ```bash
@@ -257,7 +306,7 @@ pnpm install
    # (Get from Project Settings → Your apps → Web app)
    
    # Deploy security rules
-   firebase deploy --only firestore:rules,database
+   firebase deploy --only firestore:rules,database,storage
    ```
 
 4. **Configure `.env.local`**
@@ -616,11 +665,12 @@ See [TESTING.md](./TESTING.md) for the comprehensive manual testing checklist in
 - [x] **Export to PNG/SVG** - High-quality canvas export (PR #6)
 - [x] **Google Sign-In** - OAuth authentication
 - [x] **AI Canvas Agent** - 10 natural language commands
+- [x] **Owner Kick Control** - Remove users with 5-minute ban ⭐ **NEW**
+- [x] **Persistent Image Assets** - Firebase Storage integration ⭐ **NEW**
+- [x] **Keyboard Shortcuts** - Full tldraw shortcuts documented ⭐ **NEW**
 
 ### **Future Enhancements** 📋
-- [ ] Keyboard shortcuts (PR #7 - ready to implement)
 - [ ] Text styling panel (PR #8 - ready to implement)
-- [ ] Image asset persistence (Firebase Storage integration)
 - [ ] Version history & undo across sessions
 - [ ] Advanced user permissions & roles
 - [ ] Mobile optimization & touch gestures
@@ -628,6 +678,7 @@ See [TESTING.md](./TESTING.md) for the comprehensive manual testing checklist in
 - [ ] Performance monitoring dashboard
 - [ ] Collaborative text editing
 - [ ] Voice/video chat integration
+- [ ] CORS configuration for production
 
 ---
 
@@ -745,10 +796,10 @@ MIT License - See LICENSE file for details
 10. ✅ **Cursor tracking broken post-refactor** - Fixed by switching from `editor.on()` to DOM events with `container.addEventListener()` for tldraw v4 compatibility
 
 ### **Current Limitations:**
-- Images disappear on refresh (asset persistence not implemented yet)
+- ~~Images disappear on refresh~~ ✅ **FIXED** - Image persistence now implemented with Firebase Storage!
 - ~~Single default room~~ ✅ **FIXED** - Full multi-room support now implemented!
 - No mobile optimization yet (responsive design implemented for PRs #5-6)
-- Minor Firebase warnings during logout (expected, non-critical)
+- Minor CORS warnings for Firebase Storage (non-blocking, fixable for production)
 - Text styling requires direct tldraw toolbar (PR #8 will add floating panel)
 
 ---

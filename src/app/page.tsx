@@ -27,10 +27,7 @@ export default function Page(): React.JSX.Element {
 
   return (
     <main className="fixed inset-0 flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <LoadingSpinner />
-        <p className="mt-4 text-gray-600">Redirecting to rooms...</p>
-      </div>
+      <LoadingSpinner />
     </main>
   );
 }

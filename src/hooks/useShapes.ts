@@ -17,6 +17,7 @@ import {
   saveSnapshot,
 } from "../lib/firestoreSync";
 import { debounce } from "../lib/utils";
+import { processAssetUpload, getAllAssets, getAssetRecord } from "../lib/assetManagement";
 
 /**
  * Options for useShapes hook
@@ -57,6 +58,7 @@ export function useShapes({
   const [error, setError] = useState<Error | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const pendingShapesRef = useRef<Map<string, TLShape>>(new Map());
+  const processingAssetsRef = useRef<Set<string>>(new Set());
 
   /**
    * Per-shape debounced write functions
@@ -108,7 +110,91 @@ export function useShapes({
   }).current;
 
   /**
-   * Load initial shapes from Firestore on mount
+   * Helper function to handle asset uploads
+   * Detects blob URLs and uploads them to Firebase Storage
+   */
+  const handleAssetUpload = async (assetId: string, assetSrc: string): Promise<void> => {
+    if (!userId || !editor) return;
+
+    // Skip if already processing this asset
+    if (processingAssetsRef.current.has(assetId)) {
+      return;
+    }
+
+    // Only process blob URLs and data URLs (newly uploaded assets)
+    const isBlobUrl = assetSrc.startsWith('blob:');
+    const isDataUrl = assetSrc.startsWith('data:');
+    
+    if (!isBlobUrl && !isDataUrl) {
+      console.log('[useShapes] Skipping asset (not blob or data URL):', { assetId, src: assetSrc.substring(0, 50) });
+      return;
+    }
+
+    // Skip if it's already a Firebase Storage URL (already persisted)
+    if (assetSrc.includes('firebasestorage.googleapis.com')) {
+      console.log('[useShapes] Skipping asset (already persisted):', assetId);
+      return;
+    }
+
+    try {
+      processingAssetsRef.current.add(assetId);
+      console.log('[useShapes] 🚀 Processing asset upload:', { assetId, type: isBlobUrl ? 'blob' : 'data' });
+
+      let blob: Blob;
+      
+      if (isBlobUrl) {
+        // Fetch blob from blob URL
+        const response = await fetch(assetSrc);
+        blob = await response.blob();
+      } else {
+        // Convert data URL to blob
+        const response = await fetch(assetSrc);
+        blob = await response.blob();
+      }
+
+      // Get file extension from mime type
+      const mimeType = blob.type || 'image/png';
+      const ext = mimeType.split('/')[1] || 'png';
+      
+      // Convert to File
+      const file = new File([blob], `${assetId}.${ext}`, { type: mimeType });
+      
+      console.log('[useShapes] 📤 Uploading to Firebase Storage:', { 
+        assetId, 
+        size: `${(file.size / 1024).toFixed(2)}KB`,
+        mimeType 
+      });
+
+      // Upload to Storage and save record
+      const assetRecord = await processAssetUpload(file, assetId, roomId, userId);
+
+      console.log('[useShapes] ✅ Upload complete, updating tldraw asset with permanent URL');
+
+      // Update asset in tldraw with permanent URL
+      editor.store.mergeRemoteChanges(() => {
+        const asset = editor.getAsset(assetId as any);
+        if (asset && asset.type === 'image') {
+          editor.updateAssets([{
+            ...asset,
+            props: {
+              ...asset.props,
+              src: assetRecord.src,
+            },
+          }]);
+        }
+      });
+
+      console.log('[useShapes] 🎉 Asset fully uploaded and updated:', assetId);
+    } catch (err) {
+      console.error('[useShapes] ❌ Error handling asset upload:', err);
+      setError(err instanceof Error ? err : new Error("Failed to upload asset"));
+    } finally {
+      processingAssetsRef.current.delete(assetId);
+    }
+  };
+
+  /**
+   * Load initial shapes and assets from Firestore on mount
    */
   useEffect(() => {
     if (!editor || !userId || !enabled) {
@@ -123,13 +209,33 @@ export function useShapes({
         isSyncingRef.current = true;
         setIsSyncing(true);
         
+        // Load assets first
+        const assets = await getAllAssets(roomId);
+        console.log(`[useShapes] Loaded ${assets.length} assets from Firestore`);
+
+        // Create a map of asset IDs to permanent URLs
+        const assetUrlMap = new Map(assets.map(a => [a.id, a.src]));
+
         // Try to load full snapshot first (includes pages + shapes)
         const snapshot = await loadSnapshot(roomId);
         
         if (snapshot && isMounted) {
           console.log('[useShapes] Restoring from snapshot (includes pages)');
+          
+          // Update asset URLs in snapshot before loading
+          const snapshotData = snapshot as any;
+          if (snapshotData.document?.store) {
+            Object.values(snapshotData.document.store).forEach((record: any) => {
+              if (record.typeName === 'asset' && record.type === 'image') {
+                const permanentUrl = assetUrlMap.get(record.id);
+                if (permanentUrl) {
+                  record.props.src = permanentUrl;
+                }
+              }
+            });
+          }
+
           // Load full snapshot which includes pages and shapes
-          // Use loadSnapshot() function, not editor method
           tldrawLoadSnapshot(editor.store, snapshot);
           console.log('[useShapes] Snapshot restored successfully');
         } else {
@@ -144,8 +250,32 @@ export function useShapes({
             return;
           }
 
-          // Apply shapes to editor using mergeRemoteChanges to avoid triggering listeners
+          // Apply shapes AND assets to editor using mergeRemoteChanges
           editor.store.mergeRemoteChanges(() => {
+            // First, restore assets to the editor
+            if (assets.length > 0) {
+              console.log('[useShapes] Restoring assets to editor:', assets.length);
+              
+              const tldrawAssets = assets.map((assetRecord) => ({
+                id: assetRecord.id as any,
+                type: 'image' as const,
+                typeName: 'asset' as const,
+                props: {
+                  src: assetRecord.src,
+                  w: 0,
+                  h: 0,
+                  mimeType: assetRecord.mimeType,
+                  name: `asset-${assetRecord.id}`,
+                  isAnimated: false,
+                },
+                meta: {},
+              }));
+              
+              editor.createAssets(tldrawAssets);
+              console.log('[useShapes] ✅ Assets restored to editor');
+            }
+
+            // Then restore shapes
             shapes.forEach((firestoreShape) => {
               const tldrawShape = firestoreShapeToTldraw(firestoreShape);
               try {
@@ -231,6 +361,57 @@ export function useShapes({
         console.log('[useShapes] Page change detected, saving snapshot');
         saveSnapshotDebounced(editor, userId, roomId);
       }
+
+      // Process added and updated assets
+      const processAsset = (assetId: string, label: string) => {
+        // Get the full asset from the editor's asset store
+        const fullAsset = editor.getAsset(assetId as any);
+        
+        if (fullAsset && fullAsset.type === 'image') {
+          const assetSrc = (fullAsset.props as any)?.src || (fullAsset as any).src;
+          
+          console.log(`[useShapes] ${label} image asset:`, {
+            id: assetId,
+            src: assetSrc,
+            props: fullAsset.props,
+          });
+          
+          if (assetSrc && assetSrc !== '') {
+            console.log('[useShapes] ✅ Image asset with valid src:', {
+              id: assetId,
+              src: assetSrc,
+            });
+            // Handle asset upload asynchronously (don't block)
+            void handleAssetUpload(assetId, assetSrc);
+          } else {
+            console.log('[useShapes] ⏳ Asset src not ready yet (will catch on update):', assetId);
+          }
+        }
+      };
+
+      // Process added assets
+      Object.values(event.changes.added).forEach((record) => {
+        if (record.typeName === "asset") {
+          const assetId = record.id;
+          processAsset(assetId, 'Added');
+        }
+      });
+
+      // Process updated assets (catches when tldraw sets the blob URL)
+      Object.values(event.changes.updated).forEach((update) => {
+        const [from, to] = update;
+        if (to.typeName === "asset" && to.type === 'image') {
+          const assetId = to.id;
+          // Only process if src changed from empty to populated
+          const fromSrc = (from as any).props?.src || '';
+          const toSrc = (to as any).props?.src || '';
+          
+          if (toSrc && toSrc !== '' && fromSrc !== toSrc) {
+            console.log('[useShapes] Asset src updated:', { id: assetId, from: fromSrc, to: toSrc });
+            processAsset(assetId, 'Updated');
+          }
+        }
+      });
 
       // Process added shapes
       Object.values(event.changes.added).forEach((record) => {

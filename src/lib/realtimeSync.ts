@@ -314,3 +314,91 @@ export function setupPresenceHeartbeat(userId: string): NodeJS.Timeout {
   return intervalId;
 }
 
+/**
+ * Kicks a user from a room by removing their presence and setting a temporary ban
+ * Ban duration is 5 minutes to prevent immediate rejoining
+ * 
+ * @param roomId - Room ID from which to kick the user
+ * @param targetUserId - User ID to kick
+ * @param kickedBy - User ID who initiated the kick (for logging)
+ * @returns Promise that resolves when kick is complete
+ */
+export async function kickUserFromRoom(
+  roomId: string,
+  targetUserId: string,
+  kickedBy: string
+): Promise<void> {
+  if (!roomId || !targetUserId || !kickedBy) {
+    throw new Error("Room ID, target user ID, and kicked by user ID are required");
+  }
+
+  try {
+    const BAN_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+    const bannedUntil = Date.now() + BAN_DURATION_MS;
+
+    // Write ban record to RTDB
+    const banRef = ref(realtimeDb, `rooms/${roomId}/bans/${targetUserId}`);
+    await update(banRef, {
+      bannedUntil,
+      bannedBy: kickedBy,
+      bannedAt: serverTimestamp(),
+    });
+
+    // Force user offline by marking them offline in global presence
+    const userRef = ref(realtimeDb, `users/${targetUserId}`);
+    await update(userRef, {
+      online: false,
+      lastSeen: serverTimestamp(),
+    });
+
+    // Remove cursor
+    const cursorRef = ref(realtimeDb, `users/${targetUserId}/cursor`);
+    await remove(cursorRef);
+
+    console.log(`[RealtimeSync] User ${targetUserId} kicked from room ${roomId} by ${kickedBy}`);
+  } catch (error) {
+    console.error("[RealtimeSync] Error kicking user:", error);
+    throw error;
+  }
+}
+
+/**
+ * Checks if a user is currently banned from a room
+ * 
+ * @param roomId - Room ID to check
+ * @param userId - User ID to check
+ * @returns Promise resolving to ban expiration timestamp, or null if not banned
+ */
+export async function checkRoomBan(
+  roomId: string,
+  userId: string
+): Promise<number | null> {
+  if (!roomId || !userId) {
+    return null;
+  }
+
+  try {
+    const banRef = ref(realtimeDb, `rooms/${roomId}/bans/${userId}`);
+    const snapshot = await get(banRef);
+
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    const banData = snapshot.val() as { bannedUntil: number };
+    const bannedUntil = banData.bannedUntil;
+
+    // Check if ban has expired
+    if (bannedUntil && bannedUntil > Date.now()) {
+      return bannedUntil;
+    }
+
+    // Ban has expired, remove it
+    await remove(banRef);
+    return null;
+  } catch (error) {
+    console.error("[RealtimeSync] Error checking room ban:", error);
+    return null;
+  }
+}
+

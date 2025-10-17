@@ -10,10 +10,12 @@ import type { FirebaseApp } from "firebase/app";
 import type { Auth } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 import type { Database } from "firebase/database";
+import type { FirebaseStorage } from "firebase/storage";
 import { getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 /**
  * Firebase configuration from environment variables
@@ -51,4 +53,9 @@ export const db: Firestore = getFirestore(app);
  * Realtime Database instance - used for ephemeral cursor positions and presence
  */
 export const realtimeDb: Database = getDatabase(app);
+
+/**
+ * Firebase Storage instance - used for persistent image assets
+ */
+export const storage: FirebaseStorage = getStorage(app);
 

@@ -24,6 +24,12 @@
         "access": {
           ".read": "auth != null",
           ".write": "auth != null"
+        },
+        "bans": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "auth != null"
+          }
         }
       }
     }

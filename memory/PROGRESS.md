@@ -368,17 +368,19 @@ Oct 2025 (Week 4):
 
 Oct 15, 2025 (Morning): Memory Bank Initialization
 Oct 15, 2025 (Afternoon): Documentation & Demo Complete
-Oct 15, 2025 (Evening): Documentation Cleanup & Organization ← YOU ARE HERE
+Oct 15, 2025 (Evening): Documentation Cleanup & Organization
+Oct 17, 2025: Multi-Feature Implementation (5 PRs) ← YOU ARE HERE
 
 COMPLETED:
 ✅ Demo video creation
 ✅ AI development log
 ✅ Memory bank updates
 ✅ Documentation organization (moved 20+ markdown files to docs/)
-
-TODO:
-└─ Final pre-submission verification
-└─ Final submission
+✅ Owner kick control with 5-minute ban
+✅ Online users card repositioning
+✅ JellyBoard logo on rooms list
+✅ Persistent image assets with Firebase Storage
+✅ Keyboard shortcuts documentation
 ```
 
 ---
@@ -409,6 +411,85 @@ TODO:
 - Intuitive UI/UX
 - Clear error messages
 - Helpful AI personality ("Flippy")
+
+---
+
+### ✅ Milestone 8: Multi-Feature Enhancement (October 17, 2025)
+**Completed:** October 17, 2025
+
+**PR #2: Online Users Card Repositioning**
+- Changed position from `top-20` to `top-32`
+- Eliminated toolbar overlap issues
+- Improved UX for desktop users
+
+**PR #3: JellyBoard Logo**
+- Replaced "Your Rooms" text with JellyBoardBanner.png
+- Added Next.js Image optimization
+- Made logo clickable (navigates to /rooms)
+- No CLS, priority loading
+
+**PR #5: Keyboard Shortcuts Documentation**
+- Added comprehensive shortcuts section to README
+- Documented all tldraw native shortcuts (40+ shortcuts)
+- Organized by category: Navigation, Tools, Editing, Arrangement, View
+- Clear, professional formatting
+
+**PR #1: Owner Kick Control**
+- Added kick button ("X") next to non-owner users (owner only)
+- Implemented 5-minute ban system in RTDB
+- Added ban checking on room entry
+- Shows alert and redirects kicked users to /rooms
+- Updated database.rules.json for ban permissions
+- Enhanced usePresence to include uid field
+
+**PR #4: Persistent Image Assets (Firebase Storage)**
+- Created complete asset management system
+- Uploads raster images to Firebase Storage (`/rooms/{roomId}/assets/`)
+- Saves asset metadata to Firestore
+- Handles both blob and data URLs from tldraw
+- Restores assets on page load (images persist after refresh)
+- 10MB file size limit with validation
+- Storage security rules for room-scoped access
+- Supports PNG, JPEG, GIF, WebP formats
+
+**Files Created:**
+- `src/types/asset.ts` (45 lines)
+- `src/lib/assetManagement.ts` (241 lines)
+- `storage.rules` (20 lines)
+- `.cursor/IMPLEMENTATION_SUMMARY.md` (321 lines)
+
+**Files Modified:**
+- `src/components/UserList.tsx` (kick UI, repositioned)
+- `src/components/CollabCanvas.tsx` (ban check, props passing)
+- `src/lib/realtimeSync.ts` (kick & ban functions)
+- `src/hooks/usePresence.ts` (uid in return type)
+- `src/hooks/useShapes.ts` (asset upload & restore)
+- `src/lib/firebase.ts` (Storage init)
+- `src/app/rooms/page.tsx` (JellyBoard logo)
+- `src/app/page.tsx` (removed loading text)
+- `src/app/room/[roomId]/page.tsx` (removed loading text)
+- `database.rules.json` (ban rules)
+- `firestore.rules` (asset rules)
+- `firebase.json` (Storage config)
+- `next.config.ts` (fixed deprecation warnings)
+- `README.md` (keyboard shortcuts, feature updates)
+
+**Total Changes:** ~1,000+ lines added/modified across 19 files
+
+**Tests:** All existing tests passing, lint-free
+
+**Deployment:**
+- Firebase Storage enabled
+- Storage rules deployed
+- Database rules updated and deployed
+- Firestore rules updated and deployed
+
+**Bugs Fixed:**
+- Fixed tldraw v4 asset detection (assets vs shapes in store)
+- Fixed data URL vs blob URL handling
+- Fixed asset restoration (createAssets before shapes)
+- Fixed Storage CORS rules syntax errors
+- Fixed Next.js config deprecation warnings
 
 ---
 

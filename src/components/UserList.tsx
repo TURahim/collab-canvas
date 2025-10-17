@@ -48,9 +48,16 @@ export default function UserList({
     enabled: !!currentUserId,
   });
   const [kickingUserId, setKickingUserId] = useState<string | null>(null);
+  const [kickedUserIds, setKickedUserIds] = useState<Set<string>>(new Set());
 
   // Check if current user is room owner
   const isOwner = roomMetadata && currentUserId ? roomMetadata.owner === currentUserId : false;
+
+  // Filter out kicked users from the display (optimistic UI update)
+  const visibleOnlineUsers = onlineUsers.filter((user) => {
+    const userWithId = user as typeof user & { uid?: string };
+    return !userWithId.uid || !kickedUserIds.has(userWithId.uid);
+  });
 
   if (error) {
     console.error("[UserList] Presence error:", error);
@@ -90,6 +97,10 @@ export default function UserList({
     try {
       setKickingUserId(targetUserId);
       await kickUserFromRoom(roomId, targetUserId, currentUserId);
+      
+      // Optimistically remove from UI immediately
+      setKickedUserIds(prev => new Set([...prev, targetUserId]));
+      
       console.log(`[UserList] Successfully kicked user ${targetUserId}`);
     } catch (err) {
       console.error("[UserList] Error kicking user:", err);
@@ -151,9 +162,9 @@ export default function UserList({
           </div>
 
           {/* Other Users */}
-          {onlineUsers.length > 0 ? (
+          {visibleOnlineUsers.length > 0 ? (
             <div className="space-y-1">
-              {onlineUsers.map((user) => {
+              {visibleOnlineUsers.map((user) => {
                 // Type guard to ensure user has uid field
                 const userWithId = user as typeof user & { uid?: string };
                 const userId = userWithId.uid;
@@ -233,10 +244,10 @@ export default function UserList({
         </div>
 
         {/* Footer hint */}
-        {onlineUsers.length > 0 && (
+        {visibleOnlineUsers.length > 0 && (
           <div className="border-t border-gray-200 bg-gray-50 px-4 py-2 rounded-b-lg">
             <p className="text-xs text-gray-500 text-center">
-              {onlineUsers.length} other {onlineUsers.length === 1 ? "user" : "users"} online
+              {visibleOnlineUsers.length} other {visibleOnlineUsers.length === 1 ? "user" : "users"} online
             </p>
           </div>
         )}

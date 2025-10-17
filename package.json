@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@tldraw/tldraw": "^4.0.3",
+    "bad-words": "^4.0.0",
     "firebase": "^12.4.0",
     "firebase-admin": "^13.5.0",
     "lodash": "^4.17.21",

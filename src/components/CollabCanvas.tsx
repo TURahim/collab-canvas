@@ -146,12 +146,13 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
     });
   }, []);
 
-  // Set up real-time cursor tracking
+  // Set up real-time cursor tracking with room-scoped presence
   const { remoteCursors, error: cursorError } = useCursors({
     editor,
     userId: user?.uid ?? null,
     userName: user?.displayName ?? null,
     userColor: user?.color ?? "#999999",
+    roomId,  // Pass roomId for room-scoped presence
     enabled: !!user && !!user.displayName,
   });
 

@@ -1,7 +1,7 @@
 # ACTIVE CONTEXT - CollabCanvas
 
 **Last Updated:** October 17, 2025  
-**Session:** Multi-Feature Enhancement (5 PRs)
+**Session:** Room-Scoped Presence Implementation
 
 ---
 
@@ -14,15 +14,17 @@
 - ✅ PR #5: Keyboard Shortcuts Documentation
 - ✅ PR #1: Owner Kick Control with 5-Minute Ban
 - ✅ PR #4: Persistent Image Assets (Firebase Storage)
-- ✅ Fixed Next.js config deprecation warnings
-- ✅ Fixed Storage rules syntax errors
-- ✅ Fixed asset detection for tldraw v4
-- ✅ Updated memory bank and README
+- ✅ **NEW: Room-Scoped Presence System** (Milestone 9)
+  - Created 6 new room-scoped functions
+  - Updated useCursors with dual-write strategy
+  - Updated usePresence for room isolation
+  - Deployed database rules with validation
+  - Fixed critical privacy bug
 
 **Recent Commits:**
-- Not yet committed (awaiting user approval)
+- Not yet committed (awaiting user approval as per CRITICAL RULE)
 
-**Status:** All 5 PRs Complete and Working ✅
+**Status:** Room-Scoped Presence Complete and Ready for Testing ✅
 
 ---
 
@@ -42,21 +44,30 @@ users/
       y: number          // Cursor Y position
     }
 
-// Room-scoped data
+// Room-scoped data (NEW: Room-Scoped Presence System)
 rooms/
   {roomId}/
-    presence/
-      {userId}/         // User presence per room
-    cursors/
+    presence/           // NEW: Room-specific presence tracking
+      {userId}/
+        name: string
+        color: string
+        online: boolean
+        lastSeen: timestamp
+        cursor: {
+          x: number
+          y: number
+          lastSeen: timestamp
+        }
+    bans/              // User bans per room
+      {userId}/
+        bannedUntil: number
+        bannedBy: string
+        bannedAt: timestamp
+    cursors/           // Legacy cursors (kept for backward compatibility)
       {userId}/         // Cursor positions per room
     access/
       isPublic: boolean
       owner: string
-    bans/                // ⭐ NEW - Owner kick control
-      {userId}/
-        bannedUntil: number    // Unix timestamp (5 min from ban)
-        bannedBy: string       // User ID who kicked
-        bannedAt: timestamp    // Server timestamp
 ```
 
 **Security Rules:**

@@ -668,6 +668,7 @@ See [TESTING.md](./TESTING.md) for the comprehensive manual testing checklist in
 - [x] **Owner Kick Control** - Remove users with 5-minute ban ⭐ **NEW**
 - [x] **Persistent Image Assets** - Firebase Storage integration ⭐ **NEW**
 - [x] **Keyboard Shortcuts** - Full tldraw shortcuts documented ⭐ **NEW**
+- [x] **Room-Scoped Presence** - Users only see others in same room ⭐ **NEW**
 
 ### **Future Enhancements** 📋
 - [ ] Text styling panel (PR #8 - ready to implement)

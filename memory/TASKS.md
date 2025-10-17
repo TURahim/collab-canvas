@@ -1,7 +1,7 @@
 # TASKS - CollabCanvas
 
-**Last Updated:** October 16, 2024  
-**Current Sprint:** Multi-Room Foundation Complete ✅
+**Last Updated:** October 17, 2025  
+**Current Sprint:** Room-Scoped Presence Complete ✅
 
 ---
 
@@ -9,11 +9,58 @@
 
 ### None Currently ✅
 
-All critical infrastructure tasks completed! Multi-feature enhancement sprint (5 PRs) successfully delivered!
+All critical infrastructure tasks completed! Room-scoped presence system successfully implemented with all bug fixes deployed!
 
 ---
 
 ## ✅ Recently Completed (October 17, 2025)
+
+### ✓ Room-Scoped Presence System
+**Completed:** October 17, 2025  
+**Status:** ✅ Implemented, tested, and deployed
+
+**Problem Solved:**
+- Critical privacy/UX bug: Users in different rooms could see each other
+- Global presence system showed ALL users across ALL rooms
+
+**Solution Implemented:**
+- Migrated from `/users` to `/rooms/{roomId}/presence/{userId}`
+- Dual-write strategy for backward compatibility
+- Each room has isolated presence tree
+- Users only see others in the same room
+
+**New Functions Added:**
+- `updateRoomPresence()` - Room-specific presence updates
+- `listenToRoomUsers()` - Listen to users in specific room
+- `getRoomOnlineUsers()` - One-time read of room users
+- `markUserOfflineInRoom()` - Room-specific cleanup
+- `setupRoomPresenceHeartbeat()` - Room-scoped heartbeat
+- `updateRoomCursorPosition()` - Room-scoped cursor updates
+
+**Files Modified:**
+- `src/lib/realtimeSync.ts` (+265 lines, 6 new functions)
+- `src/hooks/useCursors.ts` (~150 lines modified, dual-write logic)
+- `src/hooks/usePresence.ts` (~80 lines modified, room listeners)
+- `src/components/CollabCanvas.tsx` (1 line added, roomId prop)
+- `database.rules.json` (validation rules for room presence)
+- `src/lib/roomManagement.ts` (improved delete with assets cleanup)
+
+**Bug Fixes Included:**
+1. ✅ Ban listener permission errors - Added read permission for bans/$uid
+2. ✅ Cursor update validation errors - Changed from require-all-fields to per-field validation
+3. ✅ Firebase Storage CORS errors - Configured CORS via gsutil
+4. ✅ Delete room permission errors - Added write permission at room level
+5. ✅ Assets not cleaned up on delete - Added assets collection cleanup
+
+**Total Changes:**
+- ~300 lines added
+- ~200 lines modified
+- 5 files updated
+- 3 bug fixes deployed
+- Database rules deployed
+- Storage CORS configured
+
+---
 
 ### ✓ Multi-Feature Enhancement Sprint (5 PRs)
 **Completed:** October 17, 2025  

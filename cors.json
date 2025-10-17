@@ -1,0 +1,9 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://*.vercel.app", "https://collab-canvas-e414b.web.app"],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type", "Access-Control-Allow-Origin"]
+  }
+]
+

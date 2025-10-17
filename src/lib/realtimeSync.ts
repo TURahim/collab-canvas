@@ -315,6 +315,268 @@ export function setupPresenceHeartbeat(userId: string): NodeJS.Timeout {
 }
 
 /**
+ * Updates user presence in a specific room (room-scoped presence)
+ * This is the new room-aware presence system that prevents cross-room visibility
+ * 
+ * @param roomId - Room ID where user is present
+ * @param userId - Current user's UID
+ * @param name - User's display name
+ * @param color - User's color (hex format)
+ * @returns Promise that resolves when presence is updated
+ */
+export async function updateRoomPresence(
+  roomId: string,
+  userId: string,
+  name: string,
+  color: string
+): Promise<void> {
+  if (!roomId || !userId) {
+    return;
+  }
+
+  const roomPresenceRef = ref(realtimeDb, `rooms/${roomId}/presence/${userId}`);
+  
+  try {
+    await withRetry(async (): Promise<void> => {
+      // Set user as online in this specific room
+      await update(roomPresenceRef, {
+        name,
+        color,
+        online: true,
+        lastSeen: serverTimestamp(),
+      });
+
+      // Configure auto-cleanup on disconnect
+      const disconnectRef = onDisconnect(roomPresenceRef);
+      await disconnectRef.update({
+        online: false,
+        lastSeen: serverTimestamp(),
+      });
+
+      // Remove cursor on disconnect
+      const cursorRef = ref(realtimeDb, `rooms/${roomId}/presence/${userId}/cursor`);
+      await onDisconnect(cursorRef).remove();
+    });
+    
+    console.log(`[RealtimeSync] Room presence updated for user ${userId} in room ${roomId}`);
+  } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      // Silently ignore - user is signing out or auth revoked
+      return;
+    }
+    console.error("[RealtimeSync] Error updating room presence:", error);
+  }
+}
+
+/**
+ * Listens to all users' presence in a specific room
+ * Only returns users who are online in this room
+ * 
+ * @param roomId - Room ID to monitor
+ * @param callback - Called with map of userId -> UserPresence whenever data changes
+ * @returns Unsubscribe function to stop listening
+ */
+export function listenToRoomUsers(
+  roomId: string,
+  callback: (users: Record<string, UserPresence>) => void
+): () => void {
+  if (!roomId) {
+    return () => {};
+  }
+
+  const roomPresenceRef = ref(realtimeDb, `rooms/${roomId}/presence`);
+
+  const handleSnapshot = (snapshot: DataSnapshot): void => {
+    const data = snapshot.val() as Record<string, RawUserData> | null;
+    
+    if (!data) {
+      callback({});
+      return;
+    }
+
+    // Filter and transform user data - only include online users
+    const onlineUsers: Record<string, UserPresence> = {};
+    
+    Object.entries(data).forEach(([userId, rawUserData]) => {
+      if (rawUserData.online) {
+        onlineUsers[userId] = transformUserData(userId, rawUserData);
+      }
+    });
+
+    callback(onlineUsers);
+  };
+
+  const handleError = (error: Error): void => {
+    // Permission denied errors are expected when user signs out
+    if (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission")) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[RealtimeSync] Room users listener permission denied (expected during sign-out)");
+      }
+    } else {
+      console.error("[RealtimeSync] Error listening to room users:", error);
+    }
+    callback({});
+  };
+
+  const unsubscribe = onValue(roomPresenceRef, handleSnapshot, handleError);
+
+  return unsubscribe;
+}
+
+/**
+ * Gets online users in a specific room (one-time read)
+ * 
+ * @param roomId - Room ID to query
+ * @returns Promise resolving to map of userId -> UserPresence
+ */
+export async function getRoomOnlineUsers(
+  roomId: string
+): Promise<Record<string, UserPresence>> {
+  if (!roomId) {
+    return {};
+  }
+
+  const roomPresenceRef = ref(realtimeDb, `rooms/${roomId}/presence`);
+  
+  try {
+    const snapshot = await get(roomPresenceRef);
+    const data = snapshot.val() as Record<string, RawUserData> | null;
+    
+    if (!data) {
+      return {};
+    }
+
+    // Filter and transform user data - only include online users
+    const onlineUsers: Record<string, UserPresence> = {};
+    
+    Object.entries(data).forEach(([userId, rawUserData]) => {
+      if (rawUserData.online) {
+        onlineUsers[userId] = transformUserData(userId, rawUserData);
+      }
+    });
+
+    return onlineUsers;
+  } catch (error) {
+    // Permission denied errors are expected when user signs out or auth isn't ready
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[RealtimeSync] Get room online users permission denied (expected during sign-out or before auth)");
+      }
+    } else {
+      console.error("[RealtimeSync] Error getting room online users:", error);
+    }
+    return {};
+  }
+}
+
+/**
+ * Marks user as offline in a specific room
+ * 
+ * @param roomId - Room ID where user should be marked offline
+ * @param userId - Current user's UID
+ * @returns Promise that resolves when user is marked offline
+ */
+export async function markUserOfflineInRoom(
+  roomId: string,
+  userId: string
+): Promise<void> {
+  if (!roomId || !userId) {
+    return;
+  }
+
+  const roomPresenceRef = ref(realtimeDb, `rooms/${roomId}/presence/${userId}`);
+  const cursorRef = ref(realtimeDb, `rooms/${roomId}/presence/${userId}/cursor`);
+  
+  try {
+    await update(roomPresenceRef, {
+      online: false,
+      lastSeen: serverTimestamp(),
+    });
+
+    await remove(cursorRef);
+    
+    console.log(`[RealtimeSync] User ${userId} marked offline in room ${roomId}`);
+  } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      // Silently ignore - user is signing out or auth revoked
+      return;
+    }
+    console.error("[RealtimeSync] Error marking user offline in room:", error);
+  }
+}
+
+/**
+ * Sets up room-scoped presence heartbeat
+ * Updates lastSeen timestamp every 10 seconds to keep user marked as online in the room
+ * 
+ * @param roomId - Room ID where user is present
+ * @param userId - Current user's UID
+ * @returns Interval ID that can be cleared with clearInterval()
+ */
+export function setupRoomPresenceHeartbeat(
+  roomId: string,
+  userId: string
+): NodeJS.Timeout {
+  const heartbeatCallback = async (): Promise<void> => {
+    if (!roomId || !userId) {
+      return;
+    }
+    
+    const roomPresenceRef = ref(realtimeDb, `rooms/${roomId}/presence/${userId}`);
+    
+    try {
+      await update(roomPresenceRef, {
+        lastSeen: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("[RealtimeSync] Error updating room heartbeat:", error);
+    }
+  };
+
+  const intervalId = setInterval(heartbeatCallback, HEARTBEAT_INTERVAL_MS);
+
+  return intervalId;
+}
+
+/**
+ * Updates cursor position in a specific room
+ * Should be throttled to ~30Hz (every 33ms) to avoid excessive writes
+ * 
+ * @param roomId - Room ID where cursor should be updated
+ * @param userId - Current user's UID
+ * @param cursor - Cursor position in page coordinates
+ * @returns Promise that resolves when update is complete
+ */
+export async function updateRoomCursorPosition(
+  roomId: string,
+  userId: string,
+  cursor: { x: number; y: number }
+): Promise<void> {
+  if (!roomId || !userId) {
+    return;
+  }
+
+  const cursorRef = ref(realtimeDb, `rooms/${roomId}/presence/${userId}/cursor`);
+  
+  try {
+    await update(cursorRef, {
+      x: cursor.x,
+      y: cursor.y,
+      lastSeen: serverTimestamp(),
+    });
+  } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      // Silently ignore - user is signing out or auth revoked
+      return;
+    }
+    console.error("[RealtimeSync] Error updating room cursor position:", error);
+  }
+}
+
+/**
  * Kicks a user from a room by setting a temporary ban
  * Ban duration is 5 minutes to prevent immediate rejoining
  * Note: We can only write the ban record - the kicked user's client will detect it

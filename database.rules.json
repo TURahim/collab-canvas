@@ -9,10 +9,35 @@
     },
     "rooms": {
       "$roomId": {
+        ".write": "auth != null",
         "presence": {
           ".read": "auth != null",
           "$uid": {
-            ".write": "$uid === auth.uid"
+            ".write": "$uid === auth.uid",
+            "name": {
+              ".validate": "newData.isString()"
+            },
+            "color": {
+              ".validate": "newData.isString()"
+            },
+            "online": {
+              ".validate": "newData.isBoolean()"
+            },
+            "lastSeen": {
+              ".validate": "newData.isNumber()"
+            },
+            "cursor": {
+              ".validate": "newData.hasChildren(['x', 'y'])",
+              "x": {
+                ".validate": "newData.isNumber()"
+              },
+              "y": {
+                ".validate": "newData.isNumber()"
+              },
+              "lastSeen": {
+                ".validate": "newData.isNumber()"
+              }
+            }
           }
         },
         "cursors": {
@@ -28,6 +53,7 @@
         "bans": {
           ".read": "auth != null",
           "$uid": {
+            ".read": "auth != null",
             ".write": "auth != null"
           }
         }

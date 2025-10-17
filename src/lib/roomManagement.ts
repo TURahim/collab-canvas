@@ -228,26 +228,50 @@ export async function deleteRoom(
       throw new Error("Only the room owner can delete this room");
     }
 
-    // Delete from Firestore (metadata and shapes)
-    const roomMetadataRef = doc(db, "rooms", roomId, "metadata", "info");
-    await deleteDoc(roomMetadataRef);
+    console.log(`[roomManagement] Deleting room ${roomId}...`);
+
+    // Delete all subcollections first (Firestore doesn't auto-delete subcollections)
+    const deletionPromises: Promise<void>[] = [];
 
     // Delete shapes collection
     const shapesRef = collection(db, "rooms", roomId, "shapes");
     const shapesSnapshot = await getDocs(shapesRef);
-    const shapeDeletePromises = shapesSnapshot.docs.map((doc) => deleteDoc(doc.ref));
+    shapesSnapshot.docs.forEach((docSnapshot) => {
+      deletionPromises.push(deleteDoc(docSnapshot.ref));
+    });
+    console.log(`[roomManagement] Deleting ${shapesSnapshot.docs.length} shapes`);
     
     // Delete snapshot collection
     const snapshotRef = collection(db, "rooms", roomId, "snapshot");
     const snapshotSnapshot = await getDocs(snapshotRef);
-    const snapshotDeletePromises = snapshotSnapshot.docs.map((doc) => deleteDoc(doc.ref));
+    snapshotSnapshot.docs.forEach((docSnapshot) => {
+      deletionPromises.push(deleteDoc(docSnapshot.ref));
+    });
+    console.log(`[roomManagement] Deleting ${snapshotSnapshot.docs.length} snapshots`);
     
-    // Execute all deletions in parallel
-    await Promise.all([...shapeDeletePromises, ...snapshotDeletePromises]);
+    // Delete assets collection
+    const assetsRef = collection(db, "rooms", roomId, "assets");
+    const assetsSnapshot = await getDocs(assetsRef);
+    assetsSnapshot.docs.forEach((docSnapshot) => {
+      deletionPromises.push(deleteDoc(docSnapshot.ref));
+    });
+    console.log(`[roomManagement] Deleting ${assetsSnapshot.docs.length} assets`);
+    
+    // Execute all subcollection deletions in parallel
+    await Promise.all(deletionPromises);
+    console.log("[roomManagement] All subcollections deleted");
 
-    // Delete from RTDB (presence, cursors, access)
+    // Delete metadata last (after subcollections are cleaned up)
+    const roomMetadataRef = doc(db, "rooms", roomId, "metadata", "info");
+    await deleteDoc(roomMetadataRef);
+    console.log("[roomManagement] Metadata deleted");
+
+    // Delete from RTDB (presence, cursors, bans, access)
     const roomRtdbRef = ref(realtimeDb, `rooms/${roomId}`);
     await remove(roomRtdbRef);
+    console.log("[roomManagement] RTDB data deleted");
+
+    console.log(`[roomManagement] Room ${roomId} deleted successfully`);
   } catch (error) {
     console.error("[roomManagement] Error deleting room:", error);
     throw error;

@@ -6,7 +6,12 @@
 import { useEffect, useState } from "react";
 
 import type { UserPresence } from "../types";
-import { getOnlineUsers, listenToUsers } from "../lib/realtimeSync";
+import { 
+  getOnlineUsers, 
+  listenToUsers,
+  getRoomOnlineUsers,
+  listenToRoomUsers
+} from "../lib/realtimeSync";
 
 /**
  * Options for usePresence hook
@@ -62,9 +67,41 @@ export function usePresence({
       return;
     }
 
-    // If no roomId, fall back to global presence (backward compatibility)
-    if (!roomId) {
-      let isMounted = true;
+    let isMounted = true;
+
+    if (roomId) {
+      // Room-scoped presence (new system)
+      console.log(`[usePresence] Setting up room-scoped presence for room ${roomId}`);
+      
+      const loadInitialUsers = async (): Promise<void> => {
+        try {
+          const users = await getRoomOnlineUsers(roomId);
+          if (isMounted) {
+            setUsersMap(users);
+          }
+        } catch (err) {
+          console.error("[usePresence] Error loading initial room users:", err);
+          if (isMounted) {
+            setError(err instanceof Error ? err : new Error("Failed to load room users"));
+          }
+        }
+      };
+
+      loadInitialUsers();
+
+      const unsubscribe = listenToRoomUsers(roomId, (users) => {
+        if (isMounted) {
+          setUsersMap(users);
+        }
+      });
+
+      return (): void => {
+        isMounted = false;
+        unsubscribe();
+      };
+    } else {
+      // Global presence (fallback for backward compatibility)
+      console.log('[usePresence] Setting up global presence (no roomId)');
 
       const loadInitialUsers = async (): Promise<void> => {
         try {
@@ -93,13 +130,6 @@ export function usePresence({
         unsubscribe();
       };
     }
-
-    // Room-scoped presence: just return current user for now
-    // In the future, we'll implement proper room-scoped presence in RTDB
-    console.log('[usePresence] Room-scoped mode - showing only current user for now');
-    setUsersMap({});
-
-    return () => {};
   }, [currentUserId, roomId, enabled]);
 
   // Convert map to array and add uid field

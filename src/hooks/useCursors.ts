@@ -13,6 +13,11 @@ import {
   setupPresenceHeartbeat,
   updateCursorPosition,
   updateUserPresence,
+  listenToRoomUsers,
+  markUserOfflineInRoom,
+  setupRoomPresenceHeartbeat,
+  updateRoomCursorPosition,
+  updateRoomPresence,
 } from "../lib/realtimeSync";
 import { throttle } from "../lib/utils";
 
@@ -24,6 +29,7 @@ interface UseCursorsOptions {
   userId: string | null;
   userName: string | null;
   userColor: string;
+  roomId?: string;  // NEW: Optional room ID for room-scoped presence
   enabled?: boolean;
 }
 
@@ -42,6 +48,7 @@ interface UseCursorsReturn {
  * - Listens to other users' cursor positions
  * - Manages presence (online/offline status)
  * - Auto-cleanup on unmount
+ * - Supports both global and room-scoped presence
  * 
  * @returns Object containing remoteCursors, isTracking status, and error state
  */
@@ -50,6 +57,7 @@ export function useCursors({
   userId,
   userName,
   userColor,
+  roomId,
   enabled = true,
 }: UseCursorsOptions): UseCursorsReturn {
   const [remoteCursors, setRemoteCursors] = useState<Record<string, UserPresence>>({});
@@ -60,12 +68,25 @@ export function useCursors({
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Throttled cursor update function (30Hz = every 33ms)
+  // Uses room-scoped cursor position if roomId is available (dual-write for backward compatibility)
   const throttledUpdateCursor = useRef(
     throttle(
-      (uid: string, cursor: { x: number; y: number }): void => {
-        updateCursorPosition(uid, cursor).catch((err) => {
-          console.error("[useCursors] Failed to update cursor:", err);
-        });
+      (uid: string, cursor: { x: number; y: number }, currentRoomId?: string): void => {
+        if (currentRoomId) {
+          // Room-scoped cursor update
+          updateRoomCursorPosition(currentRoomId, uid, cursor).catch((err) => {
+            console.error("[useCursors] Failed to update room cursor:", err);
+          });
+          // Dual-write to global for backward compatibility
+          updateCursorPosition(uid, cursor).catch((err) => {
+            console.error("[useCursors] Failed to update global cursor:", err);
+          });
+        } else {
+          // Global cursor update (fallback)
+          updateCursorPosition(uid, cursor).catch((err) => {
+            console.error("[useCursors] Failed to update cursor:", err);
+          });
+        }
       },
       33
     )
@@ -91,7 +112,7 @@ export function useCursors({
         try {
           // Convert screen coordinates to page coordinates using tldraw's methods
           const point = editor.screenToPage({ x: e.clientX, y: e.clientY });
-          throttledUpdateCursor(userId, { x: point.x, y: point.y });
+          throttledUpdateCursor(userId, { x: point.x, y: point.y }, roomId);
         } catch (err) {
           console.error("[useCursors] Error updating cursor:", err);
         }
@@ -111,11 +132,12 @@ export function useCursors({
       setError(err instanceof Error ? err : new Error("Failed to set up cursor tracking"));
       setIsTracking(false);
     }
-  }, [editor, userId, userName, enabled, throttledUpdateCursor]);
+  }, [editor, userId, userName, enabled, roomId, throttledUpdateCursor]);
 
   /**
    * Set up user presence and listen to other users' cursors
    * Implements performance optimization to prevent unnecessary re-renders
+   * Uses room-scoped presence if roomId is provided (dual-write for backward compatibility)
    */
   useEffect(() => {
     if (!userId || !userName || !enabled) {
@@ -126,50 +148,103 @@ export function useCursors({
 
     const setupPresence = async (): Promise<void> => {
       try {
-        // Update user presence in Realtime DB
-        await updateUserPresence(userId, userName, userColor);
+        if (roomId) {
+          // Room-scoped presence (new system)
+          console.log(`[useCursors] Setting up room-scoped presence for room ${roomId}`);
+          await updateRoomPresence(roomId, userId, userName, userColor);
 
-        // Set up heartbeat to maintain presence
-        heartbeatIntervalRef.current = setupPresenceHeartbeat(userId);
+          // Dual-write to global for backward compatibility
+          await updateUserPresence(userId, userName, userColor);
 
-        // Listen to all users' cursors
-        if (isMounted) {
-          unsubscribeRef.current = listenToUsers((users) => {
-            if (!isMounted) {
-              return;
-            }
-            
-            // Filter out current user
-            const { [userId]: _currentUser, ...remoteCursorsMap } = users;
-            
-            // Only update if cursors actually changed (prevent unnecessary re-renders)
-            setRemoteCursors((prevCursors) => {
-              const prevKeys = Object.keys(prevCursors).sort().join(",");
-              const newKeys = Object.keys(remoteCursorsMap).sort().join(",");
-              
-              // Quick check: if user list changed, update
-              if (prevKeys !== newKeys) {
-                return remoteCursorsMap;
+          // Set up room-scoped heartbeat
+          heartbeatIntervalRef.current = setupRoomPresenceHeartbeat(roomId, userId);
+
+          // Listen to users in this room only
+          if (isMounted) {
+            unsubscribeRef.current = listenToRoomUsers(roomId, (users) => {
+              if (!isMounted) {
+                return;
               }
               
-              // Deep check: if cursor positions or user data changed, update
-              for (const [uid, user] of Object.entries(remoteCursorsMap)) {
-                const prevUser = prevCursors[uid];
-                if (
-                  !prevUser ||
-                  prevUser.cursor?.x !== user.cursor?.x ||
-                  prevUser.cursor?.y !== user.cursor?.y ||
-                  prevUser.name !== user.name ||
-                  prevUser.color !== user.color
-                ) {
+              // Filter out current user
+              const { [userId]: _currentUser, ...remoteCursorsMap } = users;
+              
+              // Only update if cursors actually changed (prevent unnecessary re-renders)
+              setRemoteCursors((prevCursors) => {
+                const prevKeys = Object.keys(prevCursors).sort().join(",");
+                const newKeys = Object.keys(remoteCursorsMap).sort().join(",");
+                
+                // Quick check: if user list changed, update
+                if (prevKeys !== newKeys) {
                   return remoteCursorsMap;
                 }
+                
+                // Deep check: if cursor positions or user data changed, update
+                for (const [uid, user] of Object.entries(remoteCursorsMap)) {
+                  const prevUser = prevCursors[uid];
+                  if (
+                    !prevUser ||
+                    prevUser.cursor?.x !== user.cursor?.x ||
+                    prevUser.cursor?.y !== user.cursor?.y ||
+                    prevUser.name !== user.name ||
+                    prevUser.color !== user.color
+                  ) {
+                    return remoteCursorsMap;
+                  }
+                }
+                
+                // No changes, keep previous reference to avoid re-render
+                return prevCursors;
+              });
+            });
+          }
+        } else {
+          // Global presence (fallback)
+          console.log('[useCursors] Setting up global presence (no roomId)');
+          await updateUserPresence(userId, userName, userColor);
+
+          // Set up heartbeat to maintain presence
+          heartbeatIntervalRef.current = setupPresenceHeartbeat(userId);
+
+          // Listen to all users' cursors
+          if (isMounted) {
+            unsubscribeRef.current = listenToUsers((users) => {
+              if (!isMounted) {
+                return;
               }
               
-              // No changes, keep previous reference to avoid re-render
-              return prevCursors;
+              // Filter out current user
+              const { [userId]: _currentUser, ...remoteCursorsMap } = users;
+              
+              // Only update if cursors actually changed (prevent unnecessary re-renders)
+              setRemoteCursors((prevCursors) => {
+                const prevKeys = Object.keys(prevCursors).sort().join(",");
+                const newKeys = Object.keys(remoteCursorsMap).sort().join(",");
+                
+                // Quick check: if user list changed, update
+                if (prevKeys !== newKeys) {
+                  return remoteCursorsMap;
+                }
+                
+                // Deep check: if cursor positions or user data changed, update
+                for (const [uid, user] of Object.entries(remoteCursorsMap)) {
+                  const prevUser = prevCursors[uid];
+                  if (
+                    !prevUser ||
+                    prevUser.cursor?.x !== user.cursor?.x ||
+                    prevUser.cursor?.y !== user.cursor?.y ||
+                    prevUser.name !== user.name ||
+                    prevUser.color !== user.color
+                  ) {
+                    return remoteCursorsMap;
+                  }
+                }
+                
+                // No changes, keep previous reference to avoid re-render
+                return prevCursors;
+              });
             });
-          });
+          }
         }
       } catch (err) {
         console.error("[useCursors] Error setting up presence:", err);
@@ -197,14 +272,17 @@ export function useCursors({
         unsubscribeRef.current = null;
       }
 
-      // Note: We don't call markUserOffline() here because:
+      // Mark user as offline in the appropriate scope
+      if (roomId) {
+        markUserOfflineInRoom(roomId, userId).catch(console.error);
+      }
+      // Note: We don't call markUserOffline() for global presence because:
       // 1. Firebase onDisconnect() handlers already handle this automatically
       // 2. If user is logging out, signOutUser() already marks them offline
       // 3. Calling it here would cause permission errors after sign-out
-      // The onDisconnect() handlers in writeUserToDatabase() ensure the user
-      // is marked offline when they close the tab or lose connection
+      // The onDisconnect() handlers ensure the user is marked offline
     };
-  }, [userId, userName, userColor, enabled]);
+  }, [userId, userName, userColor, roomId, enabled]);
 
   return {
     remoteCursors,

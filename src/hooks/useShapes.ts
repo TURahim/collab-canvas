@@ -16,8 +16,9 @@ import {
   loadSnapshot,
   saveSnapshot,
 } from "../lib/firestoreSync";
-import { debounce } from "../lib/utils";
+import { debounce, throttle } from "../lib/utils";
 import { processAssetUpload, getAllAssets, getAssetRecord } from "../lib/assetManagement";
+import { updateDragPosition, clearDragPosition, listenToDragUpdates } from "../lib/realtimeSync";
 
 /**
  * Options for useShapes hook
@@ -548,6 +549,112 @@ export function useShapes({
       isMounted = false;
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
+    };
+  }, [editor, userId, roomId, enabled]);
+
+  /**
+   * Real-time drag sync - Updates shape positions at 60Hz during drag
+   * This provides smooth collaborative drag experience with < 100ms latency
+   */
+  useEffect(() => {
+    if (!editor || !userId || !roomId || !enabled) {
+      return;
+    }
+
+    let draggedShapeId: TLShapeId | null = null;
+    let isDragging = false;
+
+    // Throttled drag update (60Hz = 16ms) - Only send position, not full shape data
+    const throttledDragUpdate = throttle((shapeId: TLShapeId, x: number, y: number) => {
+      void updateDragPosition(roomId, shapeId, { x, y }, userId);
+    }, 16);
+
+    // Listen to pointer events for drag detection
+    const handlePointerMove = (): void => {
+      if (!editor) {
+        return;
+      }
+
+      try {
+        const selectedShapes = editor.getSelectedShapes();
+        const instanceState = editor.getInstanceState();
+
+        // Check if we're in a drag operation
+        if (selectedShapes.length === 1 && instanceState.isCoarsePointer === false) {
+          const shape = selectedShapes[0];
+          
+          // Detect if drag started
+          if (!isDragging && draggedShapeId !== shape.id) {
+            isDragging = true;
+            draggedShapeId = shape.id;
+          }
+
+          // Send throttled updates during drag
+          if (isDragging && draggedShapeId === shape.id) {
+            throttledDragUpdate(shape.id, shape.x, shape.y);
+          }
+        }
+      } catch (err) {
+        // Silently handle errors during drag detection
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[useShapes] Drag detection error:", err);
+        }
+      }
+    };
+
+    const handlePointerUp = async (): Promise<void> => {
+      if (draggedShapeId) {
+        await clearDragPosition(roomId, draggedShapeId);
+        draggedShapeId = null;
+        isDragging = false;
+      }
+    };
+
+    // Add listeners
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    // Listen to remote drag updates from other users
+    const unsubscribeDrag = listenToDragUpdates(roomId, (updates) => {
+      if (!editor) return;
+
+      updates.forEach((update) => {
+        // Ignore our own drag updates
+        if (update.userId === userId) {
+          return;
+        }
+
+        try {
+          // Update shape position locally (don't sync back to avoid loops)
+          const shape = editor.getShape(update.shapeId as TLShapeId);
+          if (shape) {
+            isSyncingRef.current = true;
+            editor.updateShape({
+              id: update.shapeId as TLShapeId,
+              type: shape.type,
+              x: update.x,
+              y: update.y,
+            });
+            isSyncingRef.current = false;
+          }
+        } catch (err) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[useShapes] Could not apply remote drag update:", err);
+          }
+        }
+      });
+    });
+
+    // Cleanup
+    return (): void => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      unsubscribeDrag();
+      
+      // Clear any ongoing drag state
+      if (draggedShapeId) {
+        void clearDragPosition(roomId, draggedShapeId);
+      }
     };
   }, [editor, userId, roomId, enabled]);
 

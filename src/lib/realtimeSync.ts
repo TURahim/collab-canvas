@@ -703,3 +703,174 @@ export function listenForRoomBan(
   return unsubscribe;
 }
 
+/**
+ * Updates the position of a shape during drag operation
+ * Writes to lightweight Realtime DB path for 60Hz updates
+ * 
+ * @param roomId - Room ID
+ * @param shapeId - Shape ID being dragged
+ * @param position - Current drag position {x, y}
+ * @param userId - User ID performing the drag
+ * @returns Promise that resolves when update is complete
+ */
+export async function updateDragPosition(
+  roomId: string,
+  shapeId: string,
+  position: { x: number; y: number },
+  userId: string
+): Promise<void> {
+  if (!roomId || !shapeId || !userId) {
+    return;
+  }
+
+  const dragRef = ref(realtimeDb, `rooms/${roomId}/dragging/${shapeId}`);
+
+  try {
+    await update(dragRef, {
+      x: position.x,
+      y: position.y,
+      userId,
+      lastUpdate: serverTimestamp(),
+    });
+  } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      return;
+    }
+    console.error("[RealtimeSync] Error updating drag position:", error);
+  }
+}
+
+/**
+ * Clears drag state when drag operation ends
+ * 
+ * @param roomId - Room ID
+ * @param shapeId - Shape ID that was being dragged
+ * @returns Promise that resolves when drag state is cleared
+ */
+export async function clearDragPosition(
+  roomId: string,
+  shapeId: string
+): Promise<void> {
+  if (!roomId || !shapeId) {
+    return;
+  }
+
+  const dragRef = ref(realtimeDb, `rooms/${roomId}/dragging/${shapeId}`);
+
+  try {
+    await remove(dragRef);
+  } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      return;
+    }
+    console.error("[RealtimeSync] Error clearing drag position:", error);
+  }
+}
+
+/**
+ * Listens to drag updates from other users in the room
+ * Calls callback with array of current drag updates
+ * 
+ * @param roomId - Room ID to listen to
+ * @param callback - Function called when drag updates change
+ * @returns Unsubscribe function to stop listening
+ */
+export function listenToDragUpdates(
+  roomId: string,
+  callback: (updates: Array<{ shapeId: string; x: number; y: number; userId: string; lastUpdate: number }>) => void
+): () => void {
+  if (!roomId) {
+    return () => {};
+  }
+
+  const draggingRef = ref(realtimeDb, `rooms/${roomId}/dragging`);
+
+  const handleSnapshot = (snapshot: DataSnapshot): void => {
+    const updates: Array<{ shapeId: string; x: number; y: number; userId: string; lastUpdate: number }> = [];
+
+    if (snapshot.exists()) {
+      snapshot.forEach((childSnapshot) => {
+        const shapeId = childSnapshot.key;
+        const data = childSnapshot.val() as { x: number; y: number; userId: string; lastUpdate: number };
+        
+        if (shapeId && data.x !== undefined && data.y !== undefined && data.userId) {
+          updates.push({
+            shapeId,
+            x: data.x,
+            y: data.y,
+            userId: data.userId,
+            lastUpdate: data.lastUpdate || Date.now(),
+          });
+        }
+      });
+    }
+
+    callback(updates);
+  };
+
+  const handleError = (error: Error): void => {
+    // Permission errors expected if not authenticated
+    if (!error.message?.includes("PERMISSION_DENIED")) {
+      console.error("[RealtimeSync] Error listening to drag updates:", error);
+    }
+  };
+
+  const unsubscribe = onValue(draggingRef, handleSnapshot, handleError);
+
+  return unsubscribe;
+}
+
+/**
+ * Cleans up stale drag states (older than 5 seconds)
+ * Should be called periodically to prevent memory leaks from disconnected users
+ * 
+ * @param roomId - Room ID to clean up
+ * @returns Promise that resolves when cleanup is complete
+ */
+export async function cleanupStaleDragStates(roomId: string): Promise<void> {
+  if (!roomId) {
+    return;
+  }
+
+  const draggingRef = ref(realtimeDb, `rooms/${roomId}/dragging`);
+  const STALE_THRESHOLD_MS = 5000; // 5 seconds
+
+  try {
+    const snapshot = await get(draggingRef);
+    
+    if (!snapshot.exists()) {
+      return;
+    }
+
+    const now = Date.now();
+    const deletePromises: Promise<void>[] = [];
+
+    snapshot.forEach((childSnapshot) => {
+      const data = childSnapshot.val() as { lastUpdate: number };
+      const age = now - (data.lastUpdate || 0);
+
+      if (age > STALE_THRESHOLD_MS) {
+        const shapeId = childSnapshot.key;
+        if (shapeId) {
+          const staleRef = ref(realtimeDb, `rooms/${roomId}/dragging/${shapeId}`);
+          deletePromises.push(remove(staleRef));
+        }
+      }
+    });
+
+    await Promise.all(deletePromises);
+    
+    if (deletePromises.length > 0) {
+      console.log(`[RealtimeSync] Cleaned up ${deletePromises.length} stale drag states from room ${roomId}`);
+    }
+  } catch (error) {
+    // Permission denied errors are expected when user signs out
+    if (error instanceof Error && (error.message?.includes("PERMISSION_DENIED") || error.message?.includes("permission"))) {
+      return;
+    }
+    console.error("[RealtimeSync] Error cleaning up stale drag states:", error);
+  }
+}
+

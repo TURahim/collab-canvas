@@ -84,3 +84,15 @@ export interface AuthState {
   error: Error | null;
 }
 
+/**
+ * DragUpdate represents real-time drag state for a shape
+ * Used to sync drag operations at 60Hz for smooth collaboration
+ */
+export interface DragUpdate {
+  shapeId: string;
+  x: number;
+  y: number;
+  userId: string;
+  lastUpdate: number; // Timestamp in milliseconds
+}
+

@@ -56,6 +56,24 @@
             ".read": "auth != null",
             ".write": "auth != null"
           }
+        },
+        "dragging": {
+          ".read": "auth != null",
+          "$shapeId": {
+            ".write": "auth != null",
+            "x": {
+              ".validate": "newData.isNumber()"
+            },
+            "y": {
+              ".validate": "newData.isNumber()"
+            },
+            "userId": {
+              ".validate": "newData.isString()"
+            },
+            "lastUpdate": {
+              ".validate": "newData.isNumber()"
+            }
+          }
         }
       }
     }

@@ -73,15 +73,26 @@ export function useShapes({
     const existingTimer = debounceTimersRef.current.get(shape.id);
     if (existingTimer) {
       clearTimeout(existingTimer);
+      console.log('[useShapes] ⏱️ Debounce timer reset for shape:', shape.id);
     }
     
     // Set new timer for THIS shape only
     const timer = setTimeout(async () => {
+      console.log('[useShapes] ⏰ DEBOUNCE TIMER FIRED - Writing shape to Firestore:', {
+        id: shape.id,
+        type: shape.type,
+        props: shape.type === 'geo' ? {
+          w: (shape.props as any).w,
+          h: (shape.props as any).h,
+        } : 'non-geo',
+      });
+      
       try {
         await writeShapeToFirestore(room, shape, uid);
         debounceTimersRef.current.delete(shape.id);
+        console.log('[useShapes] ✅ Shape written successfully (debounced):', shape.id);
       } catch (err) {
-        console.error("[useShapes] Error writing shape:", err);
+        console.error("[useShapes] ❌ Error writing shape:", err);
         setError(err instanceof Error ? err : new Error("Failed to write shape"));
       }
     }, 300);
@@ -124,10 +135,23 @@ export function useShapes({
     try {
       // Use getSnapshot() function to get document state
       const { document } = getSnapshot(ed.store);
+      
+      // Log what shapes are in the snapshot
+      const shapes = Object.values((document as any).store || {}).filter((r: any) => r.typeName === 'shape');
+      console.log('[useShapes] 📸 SAVING SNAPSHOT IMMEDIATELY:', {
+        totalShapes: shapes.length,
+        shapeDetails: shapes.map((s: any) => ({
+          id: s.id,
+          type: s.type,
+          props: s.type === 'geo' ? { w: s.props?.w, h: s.props?.h } : 'non-geo',
+        })),
+        timestamp: new Date().toISOString(),
+      });
+      
       await saveSnapshot(room, { document, session: {} } as any, uid);
-      console.log('[useShapes] Snapshot saved immediately (critical operation)');
+      console.log('[useShapes] ✅ Snapshot saved immediately (critical operation)');
     } catch (err) {
-      console.error("[useShapes] Error saving snapshot immediately:", err);
+      console.error("[useShapes] ❌ Error saving snapshot immediately:", err);
     }
   }).current;
 
@@ -245,10 +269,26 @@ export function useShapes({
         const snapshot = await loadSnapshot(roomId);
         
         if (snapshot && isMounted) {
-          console.log('[useShapes] Restoring from snapshot (includes pages)');
+          console.log('[useShapes] 📂 LOADING SNAPSHOT FROM FIRESTORE');
+          
+          // Log what shapes are in the snapshot before loading
+          const snapshotData = snapshot as any;
+          const snapshotShapes = Object.values(snapshotData.document?.store || {}).filter((r: any) => r.typeName === 'shape');
+          console.log('[useShapes] 📊 Snapshot contains:', {
+            totalShapes: snapshotShapes.length,
+            shapeDetails: snapshotShapes.map((s: any) => ({
+              id: s.id,
+              type: s.type,
+              props: s.type === 'geo' ? { 
+                w: s.props?.w, 
+                h: s.props?.h,
+                geo: s.props?.geo 
+              } : 'non-geo',
+            })),
+            timestamp: new Date().toISOString(),
+          });
           
           // Update asset URLs in snapshot before loading
-          const snapshotData = snapshot as any;
           if (snapshotData.document?.store) {
             Object.values(snapshotData.document.store).forEach((record: any) => {
               if (record.typeName === 'asset' && record.type === 'image') {
@@ -262,7 +302,7 @@ export function useShapes({
 
           // Load full snapshot which includes pages and shapes
           tldrawLoadSnapshot(editor.store, snapshot);
-          console.log('[useShapes] Snapshot restored successfully');
+          console.log('[useShapes] ✅ Snapshot restored successfully');
         } else {
           // Fallback: load individual shapes (backward compatibility)
           console.log('[useShapes] No snapshot found, loading individual shapes');
@@ -439,24 +479,74 @@ export function useShapes({
       });
 
       // Process added shapes
+      let hasShapeCreation = false;
       Object.values(event.changes.added).forEach((record) => {
         if (record.typeName === "shape") {
           const shape = record as TLShape;
-          console.log('[useShapes] Saving new shape to Firestore:', {
+          
+          // Log shape details to debug
+          console.log('[useShapes] 🆕 NEW SHAPE ADDED:', {
             id: shape.id,
             type: shape.type,
             source: event.source,
+            x: shape.x,
+            y: shape.y,
+            props: shape.type === 'geo' ? {
+              w: (shape.props as any).w,
+              h: (shape.props as any).h,
+              geo: (shape.props as any).geo,
+            } : 'non-geo',
+            timestamp: new Date().toISOString(),
           });
+          
           pendingShapesRef.current.set(shape.id, shape);
-          writeShapeDebounced(shape, userId, roomId);
+          hasShapeCreation = true;
+          
+          // Write immediately on creation (no debounce) to ensure persistence
+          // This prevents shapes from disappearing if user refreshes quickly
+          writeShapeToFirestore(roomId, shape, userId).catch((err) => {
+            console.error("[useShapes] Error writing new shape:", err);
+            setError(err instanceof Error ? err : new Error("Failed to write shape"));
+          });
         }
       });
 
+      // If shapes were created, save snapshot immediately to ensure persistence
+      // This guarantees shapes persist even if user refreshes immediately
+      if (hasShapeCreation) {
+        console.log('[useShapes] 📸 Shape creation detected, saving snapshot immediately');
+        void saveSnapshotImmediate(editor, userId, roomId);
+      }
+
       // Process updated shapes
       Object.values(event.changes.updated).forEach((update) => {
-        const [, to] = update;
+        const [from, to] = update;
         if (to.typeName === "shape") {
           const shape = to as TLShape;
+          
+          // Log shape update details to debug
+          console.log('[useShapes] 🔄 SHAPE UPDATED (debounced 300ms):', {
+            id: shape.id,
+            type: shape.type,
+            source: event.source,
+            props: shape.type === 'geo' ? {
+              w: (shape.props as any).w,
+              h: (shape.props as any).h,
+              geo: (shape.props as any).geo,
+            } : 'non-geo',
+            changed: {
+              from: from.type === 'geo' ? {
+                w: ((from as any).props as any)?.w,
+                h: ((from as any).props as any)?.h,
+              } : 'non-geo',
+              to: shape.type === 'geo' ? {
+                w: (shape.props as any).w,
+                h: (shape.props as any).h,
+              } : 'non-geo',
+            },
+            timestamp: new Date().toISOString(),
+          });
+          
           pendingShapesRef.current.set(shape.id, shape);
           writeShapeDebounced(shape, userId, roomId);
         }

@@ -17,6 +17,9 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  where,
+  orderBy,
+  Timestamp as FirestoreTimestamp,
 } from "firebase/firestore";
 
 import { db } from "./firebase";
@@ -133,8 +136,21 @@ export async function deleteShapeFromFirestore(
     }
     
     await withRetry(async (): Promise<void> => {
+      // Step 1: Write tombstone record BEFORE deleting shape
+      // This allows delta replay to know what was deleted even if snapshot is stale
+      const tombstoneRef = doc(db, `rooms/${roomId}/deletes`, shapeId);
+      await setDoc(tombstoneRef, {
+        shapeId,
+        deletedAt: serverTimestamp(),
+      }, { merge: true });
+      
+      console.log('[FirestoreSync] 🪦 Tombstone written for shape:', shapeId);
+      
+      // Step 2: Delete the actual shape document
       const shapeRef = doc(db, `rooms/${roomId}/shapes`, shapeId);
       await deleteDoc(shapeRef);
+      
+      console.log('[FirestoreSync] 🗑️ Shape deleted from Firestore:', shapeId);
     });
   } catch (error) {
     console.error("[FirestoreSync] Error deleting shape:", error);
@@ -320,13 +336,21 @@ export async function saveSnapshot(
 }
 
 /**
+ * Snapshot data with metadata for delta replay
+ */
+export interface SnapshotWithMeta {
+  snapshot: TLStoreSnapshot;
+  savedAt: number; // Timestamp in milliseconds
+}
+
+/**
  * Load full tldraw document snapshot from Firestore
  * Returns null if no snapshot exists
  * 
  * @param roomId - Room identifier
- * @returns Promise resolving to snapshot or null
+ * @returns Promise resolving to snapshot with metadata or null
  */
-export async function loadSnapshot(roomId: string): Promise<TLStoreSnapshot | null> {
+export async function loadSnapshot(roomId: string): Promise<SnapshotWithMeta | null> {
   try {
     // Validate roomId is not empty
     if (!roomId || roomId.trim() === '') {
@@ -345,12 +369,95 @@ export async function loadSnapshot(roomId: string): Promise<TLStoreSnapshot | nu
     
     const data = snapshotDoc.data();
     const snapshot = JSON.parse(data.snapshot) as TLStoreSnapshot;
+    const savedAt = data.savedAt?.toMillis?.() || Date.now();
     
-    console.log("[FirestoreSync] Snapshot loaded successfully");
-    return snapshot;
+    console.log("[FirestoreSync] Snapshot loaded successfully, savedAt:", new Date(savedAt).toISOString());
+    return { snapshot, savedAt };
   } catch (error) {
     console.error("[FirestoreSync] Error loading snapshot:", error);
     return null;
+  }
+}
+
+/**
+ * Get shapes that were created/updated after a specific timestamp
+ * Used for delta replay to fetch changes since last snapshot
+ * 
+ * @param roomId - Room identifier
+ * @param sinceTimestamp - Timestamp in milliseconds
+ * @returns Promise resolving to array of shapes modified after timestamp
+ */
+export async function getShapesSince(roomId: string, sinceTimestamp: number): Promise<FirestoreShape[]> {
+  try {
+    // Validate roomId
+    if (!roomId || roomId.trim() === '') {
+      console.error('[FirestoreSync] Empty roomId in getShapesSince');
+      roomId = 'default';
+    }
+    
+    const shapesRef = collection(db, `rooms/${roomId}/shapes`);
+    const sinceDate = FirestoreTimestamp.fromMillis(sinceTimestamp);
+    
+    // Query for shapes updated after the snapshot
+    const deltaQuery = query(
+      shapesRef,
+      where('updatedAt', '>', sinceDate),
+      orderBy('updatedAt', 'asc')
+    );
+    
+    const snapshot = await getDocs(deltaQuery);
+    const shapes = snapshot.docs.map(doc => doc.data() as FirestoreShape);
+    
+    console.log(`[FirestoreSync] 📈 Found ${shapes.length} shapes updated since`, new Date(sinceTimestamp).toISOString());
+    return shapes;
+  } catch (error) {
+    console.error("[FirestoreSync] Error getting shapes since timestamp:", error);
+    return [];
+  }
+}
+
+/**
+ * Tombstone record for deleted shapes
+ */
+export interface TombstoneRecord {
+  shapeId: string;
+  deletedAt: Timestamp;
+}
+
+/**
+ * Get tombstones (deletion records) after a specific timestamp
+ * Used for delta replay to know what was deleted since last snapshot
+ * 
+ * @param roomId - Room identifier
+ * @param sinceTimestamp - Timestamp in milliseconds
+ * @returns Promise resolving to array of deletion records
+ */
+export async function getTombstonesSince(roomId: string, sinceTimestamp: number): Promise<TombstoneRecord[]> {
+  try {
+    // Validate roomId
+    if (!roomId || roomId.trim() === '') {
+      console.error('[FirestoreSync] Empty roomId in getTombstonesSince');
+      roomId = 'default';
+    }
+    
+    const deletesRef = collection(db, `rooms/${roomId}/deletes`);
+    const sinceDate = FirestoreTimestamp.fromMillis(sinceTimestamp);
+    
+    // Query for deletions after the snapshot
+    const deltaQuery = query(
+      deletesRef,
+      where('deletedAt', '>', sinceDate),
+      orderBy('deletedAt', 'asc')
+    );
+    
+    const snapshot = await getDocs(deltaQuery);
+    const tombstones = snapshot.docs.map(doc => doc.data() as TombstoneRecord);
+    
+    console.log(`[FirestoreSync] 🪦 Found ${tombstones.length} deletions since`, new Date(sinceTimestamp).toISOString());
+    return tombstones;
+  } catch (error) {
+    console.error("[FirestoreSync] Error getting tombstones since timestamp:", error);
+    return [];
   }
 }
 

@@ -15,6 +15,8 @@ import {
   writeShapeToFirestore,
   loadSnapshot,
   saveSnapshot,
+  getShapesSince,
+  getTombstonesSince,
 } from "../lib/firestoreSync";
 import { debounce, throttle } from "../lib/utils";
 import { processAssetUpload, getAllAssets, getAssetRecord } from "../lib/assetManagement";
@@ -62,42 +64,42 @@ export function useShapes({
   const processingAssetsRef = useRef<Set<string>>(new Set());
 
   /**
-   * Per-shape debounced write functions
-   * Each shape has its own debounce timer to prevent cancellation
+   * Per-shape throttled write functions
+   * Using throttle instead of debounce to ensure updates persist during drag
+   * 120ms throttle = ~8 writes per second max (good balance)
    */
-  const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const throttleTimersRef = useRef<Map<string, number>>(new Map());
   const snapshotTimerRef = useRef<NodeJS.Timeout | null>(null);
   
-  const writeShapeDebounced = useRef((shape: TLShape, uid: string, room: string) => {
-    // Clear existing timer for THIS specific shape
-    const existingTimer = debounceTimersRef.current.get(shape.id);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      console.log('[useShapes] ⏱️ Debounce timer reset for shape:', shape.id);
-    }
+  const writeShapeThrottled = useRef((shape: TLShape, uid: string, room: string) => {
+    const now = Date.now();
+    const lastWrite = throttleTimersRef.current.get(shape.id) || 0;
+    const timeSinceLastWrite = now - lastWrite;
     
-    // Set new timer for THIS shape only
-    const timer = setTimeout(async () => {
-      console.log('[useShapes] ⏰ DEBOUNCE TIMER FIRED - Writing shape to Firestore:', {
+    // Throttle: only write if 120ms has passed since last write for this shape
+    if (timeSinceLastWrite >= 120) {
+      console.log('[useShapes] ⏰ THROTTLE ALLOWING WRITE - Writing shape to Firestore:', {
         id: shape.id,
         type: shape.type,
         props: shape.type === 'geo' ? {
           w: (shape.props as any).w,
           h: (shape.props as any).h,
         } : 'non-geo',
+        timeSinceLastWrite: `${timeSinceLastWrite}ms`,
       });
       
-      try {
-        await writeShapeToFirestore(room, shape, uid);
-        debounceTimersRef.current.delete(shape.id);
-        console.log('[useShapes] ✅ Shape written successfully (debounced):', shape.id);
-      } catch (err) {
+      throttleTimersRef.current.set(shape.id, now);
+      
+      writeShapeToFirestore(room, shape, uid).catch((err) => {
         console.error("[useShapes] ❌ Error writing shape:", err);
         setError(err instanceof Error ? err : new Error("Failed to write shape"));
-      }
-    }, 300);
-    
-    debounceTimersRef.current.set(shape.id, timer);
+      });
+    } else {
+      console.log('[useShapes] ⏱️ Throttle blocking write (too soon):', {
+        id: shape.id,
+        waitMore: `${120 - timeSinceLastWrite}ms`,
+      });
+    }
   }).current;
 
   /**
@@ -266,10 +268,13 @@ export function useShapes({
         const assetUrlMap = new Map(assets.map(a => [a.id, a.src]));
 
         // Try to load full snapshot first (includes pages + shapes)
-        const snapshot = await loadSnapshot(roomId);
+        const snapshotWithMeta = await loadSnapshot(roomId);
         
-        if (snapshot && isMounted) {
+        if (snapshotWithMeta && isMounted) {
+          const { snapshot, savedAt } = snapshotWithMeta;
+          
           console.log('[useShapes] 📂 LOADING SNAPSHOT FROM FIRESTORE');
+          console.log('[useShapes] ⏰ Snapshot was saved at:', new Date(savedAt).toISOString());
           
           // Log what shapes are in the snapshot before loading
           const snapshotData = snapshot as any;
@@ -303,6 +308,59 @@ export function useShapes({
           // Load full snapshot which includes pages and shapes
           tldrawLoadSnapshot(editor.store, snapshot);
           console.log('[useShapes] ✅ Snapshot restored successfully');
+
+          // DELTA REPLAY: Apply changes that happened after snapshot was saved
+          console.log('[useShapes] 🔄 Starting delta replay...');
+          
+          // Fetch shapes created/updated since snapshot
+          const deltaShapes = await getShapesSince(roomId, savedAt);
+          
+          // Fetch deletions since snapshot
+          const tombstones = await getTombstonesSince(roomId, savedAt);
+          
+          if (deltaShapes.length > 0 || tombstones.length > 0) {
+            console.log('[useShapes] 📈 Applying deltas:', {
+              updatedShapes: deltaShapes.length,
+              deletedShapes: tombstones.length,
+            });
+            
+            editor.store.mergeRemoteChanges(() => {
+              // Apply updated/created shapes
+              deltaShapes.forEach((firestoreShape) => {
+                const tldrawShape = firestoreShapeToTldraw(firestoreShape);
+                try {
+                  const existing = editor.getShape(firestoreShape.id as TLShapeId);
+                  if (existing) {
+                    editor.updateShape(tldrawShape as TLShape);
+                    console.log('[useShapes] 📝 Delta: Updated shape:', firestoreShape.id);
+                  } else {
+                    editor.createShape(tldrawShape as TLShape);
+                    console.log('[useShapes] 🆕 Delta: Created shape:', firestoreShape.id);
+                  }
+                } catch (err) {
+                  if (process.env.NODE_ENV === "development") {
+                    console.warn("[useShapes] Could not apply delta shape:", err);
+                  }
+                }
+              });
+              
+              // Apply deletions
+              tombstones.forEach((tombstone) => {
+                try {
+                  editor.deleteShape(tombstone.shapeId as TLShapeId);
+                  console.log('[useShapes] 🗑️ Delta: Deleted shape:', tombstone.shapeId);
+                } catch (err) {
+                  if (process.env.NODE_ENV === "development") {
+                    console.warn("[useShapes] Could not delete shape from tombstone:", err);
+                  }
+                }
+              });
+            });
+            
+            console.log('[useShapes] ✅ Delta replay complete');
+          } else {
+            console.log('[useShapes] ✅ No deltas to apply - snapshot is up to date');
+          }
         } else {
           // Fallback: load individual shapes (backward compatibility)
           console.log('[useShapes] No snapshot found, loading individual shapes');
@@ -511,12 +569,9 @@ export function useShapes({
         }
       });
 
-      // If shapes were created, save snapshot immediately to ensure persistence
-      // This guarantees shapes persist even if user refreshes immediately
-      if (hasShapeCreation) {
-        console.log('[useShapes] 📸 Shape creation detected, saving snapshot immediately');
-        void saveSnapshotImmediate(editor, userId, roomId);
-      }
+      // NOTE: Removed immediate snapshot save on creation
+      // Snapshots are now only saved on idle states (pointerup, visibility change)
+      // to avoid capturing "tiny dot" before drag completes
 
       // Process updated shapes
       Object.values(event.changes.updated).forEach((update) => {
@@ -535,7 +590,7 @@ export function useShapes({
               geo: (shape.props as any).geo,
             } : 'non-geo',
             changed: {
-              from: from.type === 'geo' ? {
+              from: (from as any).type === 'geo' ? {
                 w: ((from as any).props as any)?.w,
                 h: ((from as any).props as any)?.h,
               } : 'non-geo',
@@ -548,7 +603,7 @@ export function useShapes({
           });
           
           pendingShapesRef.current.set(shape.id, shape);
-          writeShapeDebounced(shape, userId, roomId);
+          writeShapeThrottled(shape, userId, roomId);
         }
       });
 
@@ -583,14 +638,13 @@ export function useShapes({
 
     return (): void => {
       unsubscribe();
-      // Clear all pending timers on unmount
-      debounceTimersRef.current.forEach(timer => clearTimeout(timer));
-      debounceTimersRef.current.clear();
+      // Clear throttle tracking on unmount
+      throttleTimersRef.current.clear();
       if (snapshotTimerRef.current) {
         clearTimeout(snapshotTimerRef.current);
       }
     };
-  }, [editor, userId, roomId, enabled, writeShapeDebounced, saveSnapshotDebounced, saveSnapshotImmediate]);
+  }, [editor, userId, roomId, enabled, writeShapeThrottled, saveSnapshotDebounced, saveSnapshotImmediate]);
 
   /**
    * Listen to Firestore shape changes and apply to editor
@@ -783,6 +837,63 @@ export function useShapes({
       }
     };
   }, [editor, userId, roomId, enabled]);
+
+  /**
+   * Snapshot saves on idle states (pointerup, visibility change)
+   * This ensures snapshots capture final shape state, not intermediate "tiny dot" state
+   */
+  useEffect(() => {
+    if (!editor || !userId || !roomId || !enabled) {
+      return;
+    }
+
+    // Track if we've made changes since last snapshot
+    let hasUnsavedChanges = false;
+    const markDirty = () => { hasUnsavedChanges = true; };
+
+    // Listen for any store changes to mark as dirty
+    const unsubscribeStore = editor.store.listen(() => {
+      markDirty();
+    }, { scope: 'document' });
+
+    // Save snapshot on pointerup (after drag completes)
+    const handlePointerUp = () => {
+      if (hasUnsavedChanges) {
+        console.log('[useShapes] 📸 Pointerup detected - saving snapshot with final shape state');
+        void saveSnapshotImmediate(editor, userId, roomId);
+        hasUnsavedChanges = false;
+      }
+    };
+
+    // Save snapshot when tab becomes hidden (user switching tabs, closing window)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && hasUnsavedChanges) {
+        console.log('[useShapes] 📸 Tab hidden - saving snapshot before user leaves');
+        void saveSnapshotImmediate(editor, userId, roomId);
+        hasUnsavedChanges = false;
+      }
+    };
+
+    // Save snapshot before page unload
+    const handleBeforeUnload = () => {
+      if (hasUnsavedChanges) {
+        console.log('[useShapes] 📸 Page unloading - saving snapshot');
+        // Note: This is synchronous, snapshot save is async, but we try our best
+        void saveSnapshotImmediate(editor, userId, roomId);
+      }
+    };
+
+    window.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      unsubscribeStore();
+      window.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [editor, userId, roomId, enabled, saveSnapshotImmediate]);
 
   return {
     isSyncing,

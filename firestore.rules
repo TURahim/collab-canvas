@@ -77,5 +77,19 @@ service cloud.firestore {
       // Allow authenticated users to delete assets (for cleanup)
       allow delete: if request.auth != null;
     }
+    
+    // Room-based tombstone storage (deletion tracking for delta replay)
+    match /rooms/{roomId}/deletes/{shapeId} {
+      // Allow authenticated users to read deletion records
+      allow read: if request.auth != null;
+      
+      // Allow authenticated users to create tombstone records when deleting shapes
+      allow create, update: if request.auth != null
+        && request.resource.data.shapeId is string
+        && request.resource.data.deletedAt != null;
+      
+      // Allow deletion of tombstone records (for cleanup)
+      allow delete: if request.auth != null;
+    }
   }
 }

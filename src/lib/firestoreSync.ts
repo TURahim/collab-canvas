@@ -66,6 +66,12 @@ export async function writeShapeToFirestore(
   userId: string
 ): Promise<void> {
   try {
+    // Validate roomId is not empty
+    if (!roomId || roomId.trim() === '') {
+      console.error('[FirestoreSync] ❌ CRITICAL: Empty roomId detected! Using fallback "default"');
+      roomId = 'default';
+    }
+    
     console.log('[FirestoreSync] Writing shape to Firestore:', {
       shapeId: shape.id,
       type: shape.type,
@@ -120,6 +126,12 @@ export async function deleteShapeFromFirestore(
   shapeId: string
 ): Promise<void> {
   try {
+    // Validate roomId is not empty
+    if (!roomId || roomId.trim() === '') {
+      console.error('[FirestoreSync] ❌ CRITICAL: Empty roomId detected in deleteShapeFromFirestore! Using fallback "default"');
+      roomId = 'default';
+    }
+    
     await withRetry(async (): Promise<void> => {
       const shapeRef = doc(db, `rooms/${roomId}/shapes`, shapeId);
       await deleteDoc(shapeRef);
@@ -142,6 +154,13 @@ export function listenToShapes(
   roomId: string,
   callback: (changes: ShapeChanges) => void
 ): () => void {
+  // Validate roomId is not empty
+  if (!roomId || roomId.trim() === '') {
+    console.error('[FirestoreSync] ❌ CRITICAL: Empty roomId detected in listenToShapes! Using fallback "default"');
+    roomId = 'default';
+  }
+  
+  console.log('[FirestoreSync] Listening to shapes at:', `rooms/${roomId}/shapes`);
   const shapesRef = collection(db, `rooms/${roomId}/shapes`);
   const shapesQuery = query(shapesRef);
 
@@ -246,6 +265,13 @@ export async function batchWriteShapes(
  */
 export async function getAllShapes(roomId: string): Promise<FirestoreShape[]> {
   try {
+    // Validate roomId is not empty
+    if (!roomId || roomId.trim() === '') {
+      console.error('[FirestoreSync] ❌ CRITICAL: Empty roomId detected in getAllShapes! Using fallback "default"');
+      roomId = 'default';
+    }
+    
+    console.log('[FirestoreSync] Loading shapes from:', `rooms/${roomId}/shapes`);
     const shapesRef = collection(db, `rooms/${roomId}/shapes`);
     const shapesQuery = query(shapesRef);
     const snapshot = await getDocs(shapesQuery);
@@ -272,6 +298,12 @@ export async function saveSnapshot(
   userId: string
 ): Promise<void> {
   try {
+    // Validate roomId is not empty
+    if (!roomId || roomId.trim() === '') {
+      console.error('[FirestoreSync] ❌ CRITICAL: Empty roomId detected in saveSnapshot! Using fallback "default"');
+      roomId = 'default';
+    }
+    
     const snapshotRef = doc(db, `rooms/${roomId}/snapshot`, "doc");
     
     await setDoc(snapshotRef, {
@@ -280,7 +312,7 @@ export async function saveSnapshot(
       savedAt: serverTimestamp(),
     });
     
-    console.log("[FirestoreSync] Snapshot saved successfully");
+    console.log("[FirestoreSync] Snapshot saved successfully to:", `rooms/${roomId}/snapshot/doc`);
   } catch (error) {
     console.error("[FirestoreSync] Error saving snapshot:", error);
     throw error;
@@ -296,6 +328,13 @@ export async function saveSnapshot(
  */
 export async function loadSnapshot(roomId: string): Promise<TLStoreSnapshot | null> {
   try {
+    // Validate roomId is not empty
+    if (!roomId || roomId.trim() === '') {
+      console.error('[FirestoreSync] ❌ CRITICAL: Empty roomId detected in loadSnapshot! Using fallback "default"');
+      roomId = 'default';
+    }
+    
+    console.log("[FirestoreSync] Loading snapshot from:", `rooms/${roomId}/snapshot/doc`);
     const snapshotRef = doc(db, `rooms/${roomId}/snapshot`, "doc");
     const snapshotDoc = await getDoc(snapshotRef);
     

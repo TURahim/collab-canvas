@@ -206,7 +206,10 @@ export function useShapes({
 
     const loadInitialShapes = async (): Promise<void> => {
       try {
-        console.log('[useShapes] Loading initial data from Firestore...');
+        console.log('[useShapes] Loading initial data from Firestore...', {
+          roomId,
+          path: `rooms/${roomId}/shapes`,
+        });
         isSyncingRef.current = true;
         setIsSyncing(true);
         

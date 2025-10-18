@@ -111,6 +111,27 @@ export function useShapes({
   }).current;
 
   /**
+   * Save full snapshot immediately (no debounce)
+   * Used for critical operations like shape deletion to ensure state is persisted
+   */
+  const saveSnapshotImmediate = useRef(async (ed: Editor, uid: string, room: string) => {
+    // Cancel any pending debounced save
+    if (snapshotTimerRef.current) {
+      clearTimeout(snapshotTimerRef.current);
+      snapshotTimerRef.current = null;
+    }
+    
+    try {
+      // Use getSnapshot() function to get document state
+      const { document } = getSnapshot(ed.store);
+      await saveSnapshot(room, { document, session: {} } as any, uid);
+      console.log('[useShapes] Snapshot saved immediately (critical operation)');
+    } catch (err) {
+      console.error("[useShapes] Error saving snapshot immediately:", err);
+    }
+  }).current;
+
+  /**
    * Helper function to handle asset uploads
    * Detects blob URLs and uploads them to Firebase Storage
    */
@@ -442,10 +463,12 @@ export function useShapes({
       });
 
       // Process removed shapes
+      let hasShapeDeletion = false;
       Object.values(event.changes.removed).forEach((record) => {
         if (record.typeName === "shape") {
           const shapeId = record.id as string;
           pendingShapesRef.current.delete(shapeId);
+          hasShapeDeletion = true;
           // Delete immediately (no debounce for deletions)
           deleteShapeFromFirestore(roomId, shapeId).catch((err) => {
             console.error("[useShapes] Error deleting shape:", err);
@@ -453,6 +476,13 @@ export function useShapes({
           });
         }
       });
+
+      // If shapes were deleted, save snapshot immediately to persist deletion
+      // This ensures deleted shapes don't reappear on page refresh
+      if (hasShapeDeletion) {
+        console.log('[useShapes] Shape deletion detected, saving snapshot immediately');
+        void saveSnapshotImmediate(editor, userId, roomId);
+      }
     };
 
     const unsubscribe = editor.store.listen(handleStoreChange, {
@@ -466,8 +496,11 @@ export function useShapes({
       // Clear all pending timers on unmount
       debounceTimersRef.current.forEach(timer => clearTimeout(timer));
       debounceTimersRef.current.clear();
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+      }
     };
-  }, [editor, userId, roomId, enabled, writeShapeDebounced]);
+  }, [editor, userId, roomId, enabled, writeShapeDebounced, saveSnapshotDebounced, saveSnapshotImmediate]);
 
   /**
    * Listen to Firestore shape changes and apply to editor

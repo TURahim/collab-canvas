@@ -20,6 +20,44 @@
 import { type Editor, type TLShapeId, type TLShape, toRichText, createShapeId } from '@tldraw/tldraw';
 
 /**
+ * Logger abstraction for conditional logging
+ * Logs appear in development, silent in production builds
+ */
+const logger = {
+  debug: (msg: string, ...args: unknown[]) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[canvasTools] ${msg}`, ...args);
+    }
+  },
+  info: (msg: string, ...args: unknown[]) => console.info(`[canvasTools] ${msg}`, ...args),
+  error: (msg: string, ...args: unknown[]) => console.error(`[canvasTools] ${msg}`, ...args),
+};
+
+/**
+ * Resolve target specification to array of shapes
+ * Handles 'selected', 'all', single ID, or array of IDs
+ * 
+ * @param editor - tldraw editor instance
+ * @param target - Target specification
+ * @returns Array of resolved shapes
+ */
+function resolveTarget(
+  editor: Editor,
+  target: 'selected' | 'all' | TLShapeId | TLShapeId[]
+): TLShape[] {
+  if (target === 'selected') {
+    return editor.getSelectedShapes();
+  } else if (target === 'all') {
+    return editor.getCurrentPageShapes();
+  } else if (Array.isArray(target)) {
+    return target.map(id => editor.getShape(id)).filter(Boolean) as TLShape[];
+  } else {
+    const shape = editor.getShape(target as TLShapeId);
+    return shape ? [shape] : [];
+  }
+}
+
+/**
  * Shape definition interface for batch creation
  * Used internally to define multiple shapes before creating them
  */
@@ -352,7 +390,7 @@ export function createShape(
     text = '',
   } = params;
 
-  console.log(`[createShape] Creating ${type} at (${x}, ${y})`);
+  logger.debug(`Creating ${type} at (${x}, ${y})`);
 
   if (type === 'text') {
     const shapeId = createShapeId();
@@ -433,7 +471,7 @@ export function createTextShape(
     color = 'black',
   } = params;
 
-  console.log(`[createTextShape] Creating text: "${text}" at (${x}, ${y})`);
+  logger.debug(`Creating text: "${text}" at (${x}, ${y})`);
 
   const shapeId = createShapeId();
   editor.run(() => {
@@ -485,7 +523,7 @@ export function moveShape(
 
   const { shapeId, deltaX, deltaY } = params;
 
-  console.log(`[moveShape] Moving shape ${shapeId} by (${deltaX}, ${deltaY})`);
+  logger.debug(`Moving shape ${shapeId} by (${deltaX}, ${deltaY})`);
 
   const shape = editor.getShape(shapeId);
   if (!shape) {
@@ -543,19 +581,9 @@ export function moveShapeTo(
   }
   
   // Resolve target shapes
-  let shapes: any[];
-  if (target === 'selected') {
-    shapes = editor.getSelectedShapes();
-    if (shapes.length === 0) {
-      throw new Error('No shapes selected. Please select at least one shape first.');
-    }
-  } else if (target === 'all') {
-    shapes = editor.getCurrentPageShapes();
-  } else if (Array.isArray(target)) {
-    shapes = target.map(id => editor.getShape(id)).filter(Boolean);
-  } else {
-    const shape = editor.getShape(target as TLShapeId);
-    shapes = shape ? [shape] : [];
+  const shapes = resolveTarget(editor, target);
+  if (target === 'selected' && shapes.length === 0) {
+    throw new Error('No shapes selected. Please select at least one shape first.');
   }
 
   // Validate movable shapes
@@ -612,7 +640,7 @@ export function moveShapeTo(
     });
   });
 
-  console.log(`[moveShapeTo] Moved ${movedIds.length} shapes by delta (${deltaToCenter.x.toFixed(1)}, ${deltaToCenter.y.toFixed(1)})`);
+  logger.debug(`Moved ${movedIds.length} shapes by delta (${deltaToCenter.x.toFixed(1)}, ${deltaToCenter.y.toFixed(1)})`);
   
   return {
     count: movedIds.length,
@@ -634,18 +662,8 @@ function moveShapesByDelta(
   editor: Editor,
   params: { target: any; deltaX: number; deltaY: number }
 ): { count: number; moved: TLShapeId[]; skipped: Array<{ id: TLShapeId | undefined; reason: string }>; actuallyMoved: boolean } {
-  // Reuse validation logic
-  let shapes: any[];
-  if (params.target === 'selected') {
-    shapes = editor.getSelectedShapes();
-  } else if (params.target === 'all') {
-    shapes = editor.getCurrentPageShapes();
-  } else if (Array.isArray(params.target)) {
-    shapes = params.target.map(id => editor.getShape(id)).filter(Boolean);
-  } else {
-    const shape = editor.getShape(params.target);
-    shapes = shape ? [shape] : [];
-  }
+  // Resolve target shapes using helper
+  const shapes = resolveTarget(editor, params.target);
   
   const { valid, invalid } = validateMovableShapes(editor, shapes);
   
@@ -701,7 +719,7 @@ export function transformShape(
 
   const { shapeId, scaleX, scaleY, rotation } = params;
 
-  console.log(`[transformShape] Transforming shape ${shapeId}`);
+  logger.debug(`Transforming shape ${shapeId}`);
 
   const shape = editor.getShape(shapeId);
   if (!shape) {
@@ -760,7 +778,7 @@ export function arrangeShapes(
 
   const { shapeIds, pattern, spacing = 20 } = params;
 
-  console.log(`[arrangeShapes] Arranging ${shapeIds.length} shapes in ${pattern} pattern`);
+  logger.debug(`Arranging ${shapeIds.length} shapes in ${pattern} pattern`);
 
   if (shapeIds.length === 0) {
     throw new Error('No shape IDs provided');
@@ -870,7 +888,7 @@ export function createGrid(
     color = 'black',
   } = params;
 
-  console.log(`[createGrid] Creating ${rows}x${cols} grid of ${shapeType}s`);
+  logger.debug(`Creating ${rows}x${cols} grid of ${shapeType}s`);
 
   const center = getViewportCenter(editor);
   const cellWidth = 100;
@@ -948,7 +966,7 @@ export function createLoginForm(
     color = 'light-blue',
   } = params;
 
-  console.log('[createLoginForm] Creating login form with 8 shapes');
+  logger.debug('Creating login form with 8 shapes');
 
   const center = getViewportCenter(editor);
   
@@ -1039,7 +1057,7 @@ export function createLoginForm(
   // Create all shapes
   const createdShapeIds = createMultiShapeLayout(editor, shapes);
 
-  console.log(`[createLoginForm] Created ${createdShapeIds.length} shapes`);
+  logger.debug(`Created ${createdShapeIds.length} shapes`);
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {
@@ -1087,7 +1105,7 @@ export function createCard(
     color = 'light-blue',
   } = params;
 
-  console.log('[createCard] Creating card with 7 shapes');
+  logger.debug('Creating card with 7 shapes');
 
   const center = getViewportCenter(editor);
   
@@ -1169,7 +1187,7 @@ export function createCard(
   // Create all shapes
   const createdShapeIds = createMultiShapeLayout(editor, shapes);
 
-  console.log(`[createCard] Created ${createdShapeIds.length} shapes`);
+  logger.debug(`Created ${createdShapeIds.length} shapes`);
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {
@@ -1216,7 +1234,7 @@ export function createNavigationBar(
     color = 'blue',
   } = params;
 
-  console.log('[createNavigationBar] Creating professional navigation bar with menu items:', menuItems);
+  logger.debug('Creating professional navigation bar with menu items:', menuItems);
 
   const center = getViewportCenter(editor);
   
@@ -1271,7 +1289,7 @@ export function createNavigationBar(
   // Create all shapes
   const createdShapeIds = createMultiShapeLayout(editor, shapes);
 
-  console.log(`[createNavigationBar] Created ${createdShapeIds.length} shapes (nav bar + logo + ${menuItems.length} menu items)`);
+  logger.debug(`Created ${createdShapeIds.length} shapes (nav bar + logo + ${menuItems.length} menu items)`);
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {
@@ -1323,7 +1341,7 @@ export function createCheckboxList(
     spacing = 12,
   } = params;
 
-  console.log(`[createCheckboxList] Creating checkbox list with ${items.length} items`);
+  logger.debug(`Creating checkbox list with ${items.length} items`);
 
   const center = getViewportCenter(editor);
   
@@ -1395,7 +1413,7 @@ export function createCheckboxList(
   // Create all shapes
   const createdShapeIds = createMultiShapeLayout(editor, shapes);
 
-  console.log(`[createCheckboxList] Created ${createdShapeIds.length} shapes (1 container + 1 title + ${items.length * 2} checkboxes/labels)`);
+  logger.debug(`Created ${createdShapeIds.length} shapes (1 container + 1 title + ${items.length * 2} checkboxes/labels)`);
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {

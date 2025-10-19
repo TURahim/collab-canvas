@@ -256,6 +256,7 @@ function validateMovableShapes(editor: Editor, shapes: any[]): {
 /**
  * Creates multiple shapes from an array of shape definitions
  * Handles both rectangles and text shapes
+ * Uses bulk editor.createShapes() for better performance
  * 
  * @param editor - tldraw editor instance
  * @param shapes - Array of shape definitions to create
@@ -265,49 +266,45 @@ function createMultiShapeLayout(
   editor: Editor,
   shapes: ShapeDefinition[]
 ): TLShapeId[] {
-  const createdIds: TLShapeId[] = [];
-
-  for (const shape of shapes) {
-    if (shape.shapeType === 'rectangle') {
-      // Create geo (rectangle) shape
-      const shapeId = createShapeId();
-      editor.createShape({
+  // Accumulate all shape definitions with their IDs
+  const tlShapes = shapes.map(def => {
+    const shapeId = createShapeId();
+    
+    if (def.shapeType === 'rectangle') {
+      return {
         id: shapeId,
-        type: 'geo',
-        x: shape.x - shape.width / 2,
-        y: shape.y - shape.height / 2,
+        type: 'geo' as const,
+        x: def.x - def.width / 2,
+        y: def.y - def.height / 2,
         props: {
-          geo: 'rectangle',
-          w: shape.width,
-          h: shape.height,
-          color: shape.color as TldrawColor || 'black',
-          fill: 'solid',
+          geo: 'rectangle' as const,
+          w: def.width,
+          h: def.height,
+          color: (def.color as TldrawColor) || 'black',
+          fill: 'solid' as const,
         },
-      });
-      createdIds.push(shapeId);
-    } else if (shape.shapeType === 'text') {
-      // Create text shape
-      const shapeId = createShapeId();
-      editor.createShapes([
-        {
-          id: shapeId,
-          type: 'text',
-          x: shape.x - shape.width / 2,
-          y: shape.y - shape.height / 2,
-          props: {
-            richText: toRichText(shape.text || ''),
-            w: shape.width,
-            size: mapFontSize(shape.fontSize || 16),
-            color: shape.color as TldrawColor || 'black',
-            autoSize: false,
-          },
+      };
+    } else { // text
+      return {
+        id: shapeId,
+        type: 'text' as const,
+        x: def.x - def.width / 2,
+        y: def.y - def.height / 2,
+        props: {
+          richText: toRichText(def.text || ''),
+          w: def.width,
+          size: mapFontSize(def.fontSize || 16),
+          color: (def.color as TldrawColor) || 'black',
+          autoSize: false,
         },
-      ]);
-      createdIds.push(shapeId);
+      };
     }
-  }
-
-  return createdIds;
+  });
+  
+  // Create all shapes in a single bulk operation
+  editor.createShapes(tlShapes);
+  
+  return tlShapes.map(s => s.id);
 }
 
 // ==========================================

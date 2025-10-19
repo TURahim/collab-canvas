@@ -359,40 +359,44 @@ export function createShape(
 
   if (type === 'text') {
     const shapeId = createShapeId();
-    editor.createShapes([
-      {
-      id: shapeId,
-        type: 'text',
-        x: x - width / 2,
-        y: y - height / 2,
-      props: {
-          richText: toRichText(text),
-          w: width,
-          size: 'm',
-          color: mapToTldrawColor(color),
-          autoSize: false,
+    editor.run(() => {
+      editor.createShapes([
+        {
+        id: shapeId,
+          type: 'text',
+          x: x - width / 2,
+          y: y - height / 2,
+        props: {
+            richText: toRichText(text),
+            w: width,
+            size: 'm',
+            color: mapToTldrawColor(color),
+            autoSize: false,
+          },
         },
-      },
-    ]);
-    editor.select(shapeId);
+      ]);
+      editor.select(shapeId);
+    });
     return shapeId;
   } else {
     const shapeId = createShapeId();
-    editor.createShape({
-      id: shapeId,
-      type: 'geo',
-      x: x - width / 2,
-      y: y - height / 2,
-      props: {
-        geo: mapToTldrawGeoType(type),
-        w: width,
-        h: height,
-        color: mapToTldrawColor(color),
-        fill: 'solid',
-      },
+    editor.run(() => {
+      editor.createShape({
+        id: shapeId,
+        type: 'geo',
+        x: x - width / 2,
+        y: y - height / 2,
+        props: {
+          geo: mapToTldrawGeoType(type),
+          w: width,
+          h: height,
+          color: mapToTldrawColor(color),
+          fill: 'solid',
+        },
+      });
+      editor.select(shapeId);
     });
-  editor.select(shapeId);
-  return shapeId;
+    return shapeId;
   }
 }
 
@@ -435,23 +439,24 @@ export function createTextShape(
   console.log(`[createTextShape] Creating text: "${text}" at (${x}, ${y})`);
 
   const shapeId = createShapeId();
-  editor.createShapes([
-    {
-    id: shapeId,
-    type: 'text',
-      x: x - 100,
-      y: y - 25,
-    props: {
-        richText: toRichText(text),
-        w: 200,
-        size: mapFontSize(fontSize),
-        color: mapToTldrawColor(color),
-        autoSize: true,
+  editor.run(() => {
+    editor.createShapes([
+      {
+      id: shapeId,
+      type: 'text',
+        x: x - 100,
+        y: y - 25,
+      props: {
+          richText: toRichText(text),
+          w: 200,
+          size: mapFontSize(fontSize),
+          color: mapToTldrawColor(color),
+          autoSize: true,
+        },
       },
-    },
-  ]);
-
-  editor.select(shapeId);
+    ]);
+    editor.select(shapeId);
+  });
   return shapeId;
 }
 
@@ -901,7 +906,9 @@ export function createGrid(
     }
   }
 
-  editor.select(...shapeIds);
+  editor.run(() => {
+    editor.select(...shapeIds);
+  });
   return shapeIds;
 }
 
@@ -1039,7 +1046,9 @@ export function createLoginForm(
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {
-    editor.select(...createdShapeIds);
+    editor.run(() => {
+      editor.select(...createdShapeIds);
+    });
   }
 
   return createdShapeIds;
@@ -1167,7 +1176,9 @@ export function createCard(
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {
-    editor.select(...createdShapeIds);
+    editor.run(() => {
+      editor.select(...createdShapeIds);
+    });
   }
 
   return createdShapeIds;
@@ -1267,7 +1278,9 @@ export function createNavigationBar(
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {
-    editor.select(...createdShapeIds);
+    editor.run(() => {
+      editor.select(...createdShapeIds);
+    });
   }
 
   return createdShapeIds;
@@ -1389,7 +1402,9 @@ export function createCheckboxList(
 
   // Select all created shapes
   if (createdShapeIds.length > 0) {
-    editor.select(...createdShapeIds);
+    editor.run(() => {
+      editor.select(...createdShapeIds);
+    });
   }
 
   return createdShapeIds;

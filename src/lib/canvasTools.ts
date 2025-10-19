@@ -257,12 +257,12 @@ function getUnionBounds(editor: Editor, shapes: TLShape[]): {
  * @param shapes - Array of shapes to validate
  * @returns Object with valid and invalid shape arrays
  */
-function validateMovableShapes(editor: Editor, shapes: any[]): {
-  valid: any[];
-  invalid: Array<{ shape: any; reason: string }>;
+function validateMovableShapes(editor: Editor, shapes: TLShape[]): {
+  valid: TLShape[];
+  invalid: Array<{ shape: TLShape | null; reason: string }>;
 } {
-  const valid: any[] = [];
-  const invalid: Array<{ shape: any; reason: string }> = [];
+  const valid: TLShape[] = [];
+  const invalid: Array<{ shape: TLShape | null; reason: string }> = [];
   
   const currentPage = editor.getCurrentPageId();
   
@@ -660,7 +660,7 @@ export function moveShapeTo(
  */
 function moveShapesByDelta(
   editor: Editor,
-  params: { target: any; deltaX: number; deltaY: number }
+  params: { target: 'selected' | 'all' | TLShapeId | TLShapeId[]; deltaX: number; deltaY: number }
 ): { count: number; moved: TLShapeId[]; skipped: Array<{ id: TLShapeId | undefined; reason: string }>; actuallyMoved: boolean } {
   // Resolve target shapes using helper
   const shapes = resolveTarget(editor, params.target);
@@ -726,14 +726,14 @@ export function transformShape(
     throw new Error(`Shape with ID ${shapeId} not found`);
   }
 
-    const updates: any = {
+    const updates: Partial<TLShape> & { id: TLShapeId; type: string } = {
     id: shapeId,
       type: shape.type,
     };
 
   // Handle scaling for geo shapes
   if (shape.type === 'geo' && (scaleX !== undefined || scaleY !== undefined)) {
-    const currentProps = shape.props as any;
+    const currentProps = shape.props as { w: number; h: number; [key: string]: unknown };
         updates.props = {
       ...currentProps,
       w: scaleX !== undefined ? currentProps.w * scaleX : currentProps.w,
@@ -785,43 +785,45 @@ export function arrangeShapes(
   }
 
   const center = getViewportCenter(editor);
-  const shapes = shapeIds.map(id => editor.getShape(id)).filter(Boolean);
+  const shapes = shapeIds
+    .map(id => editor.getShape(id))
+    .filter((shape): shape is TLShape => shape !== undefined);
 
   if (pattern === 'horizontal') {
-    const totalWidth = shapes.reduce((sum, shape: any) => {
-      const width = shape.type === 'geo' ? shape.props.w : 200;
+    const totalWidth = shapes.reduce((sum, shape) => {
+      const width = shape.type === 'geo' ? (shape.props as { w: number }).w : 200;
       return sum + width + spacing;
     }, -spacing);
 
     let currentX = center.x - totalWidth / 2;
 
     editor.run(() => {
-      shapes.forEach((shape: any) => {
-        const width = shape.type === 'geo' ? shape.props.w : 200;
+      shapes.forEach((shape) => {
+        const width = shape.type === 'geo' ? (shape.props as { w: number }).w : 200;
         editor.updateShape({
           id: shape.id,
           type: shape.type,
           x: currentX,
-          y: center.y - (shape.type === 'geo' ? shape.props.h / 2 : 25),
+          y: center.y - (shape.type === 'geo' ? (shape.props as { h: number }).h / 2 : 25),
         });
         currentX += width + spacing;
       });
     });
   } else if (pattern === 'vertical') {
-    const totalHeight = shapes.reduce((sum, shape: any) => {
-      const height = shape.type === 'geo' ? shape.props.h : 50;
+    const totalHeight = shapes.reduce((sum, shape) => {
+      const height = shape.type === 'geo' ? (shape.props as { h: number }).h : 50;
       return sum + height + spacing;
     }, -spacing);
 
     let currentY = center.y - totalHeight / 2;
 
     editor.run(() => {
-      shapes.forEach((shape: any) => {
-        const height = shape.type === 'geo' ? shape.props.h : 50;
+      shapes.forEach((shape) => {
+        const height = shape.type === 'geo' ? (shape.props as { h: number }).h : 50;
       editor.updateShape({
         id: shape.id,
         type: shape.type,
-          x: center.x - (shape.type === 'geo' ? shape.props.w / 2 : 100),
+          x: center.x - (shape.type === 'geo' ? (shape.props as { w: number }).w / 2 : 100),
           y: currentY,
         });
         currentY += height + spacing;
@@ -836,7 +838,7 @@ export function arrangeShapes(
     const totalHeight = rows * cellHeight;
 
     editor.run(() => {
-      shapes.forEach((shape: any, index) => {
+      shapes.forEach((shape, index) => {
         const col = index % cols;
         const row = Math.floor(index / cols);
         const x = center.x - totalWidth / 2 + col * cellWidth + cellWidth / 2;
@@ -845,8 +847,8 @@ export function arrangeShapes(
         editor.updateShape({
           id: shape.id,
           type: shape.type,
-          x: x - (shape.type === 'geo' ? shape.props.w / 2 : 100),
-          y: y - (shape.type === 'geo' ? shape.props.h / 2 : 25),
+          x: x - (shape.type === 'geo' ? (shape.props as { w: number }).w / 2 : 100),
+          y: y - (shape.type === 'geo' ? (shape.props as { h: number }).h / 2 : 25),
         });
       });
     });

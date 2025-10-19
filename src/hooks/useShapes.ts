@@ -18,9 +18,11 @@ import {
   getShapesSince,
   getTombstonesSince,
 } from "../lib/firestoreSync";
-import { debounce, throttle } from "../lib/utils";
-import { processAssetUpload, getAllAssets, getAssetRecord } from "../lib/assetManagement";
+import { debounce, throttle, distance } from "../lib/utils";
+import { processAssetUpload, getAllAssets, getAssetRecord, retryPendingUploads } from "../lib/assetManagement";
 import { updateDragPosition, clearDragPosition, listenToDragUpdates } from "../lib/realtimeSync";
+import { savePendingAsset, removePendingAsset } from "../lib/indexedDB";
+import { RemoteDragSmoother } from "../lib/dragSmoothing";
 
 /**
  * Options for useShapes hook
@@ -158,8 +160,9 @@ export function useShapes({
   }).current;
 
   /**
-   * Helper function to handle asset uploads
+   * Helper function to handle asset uploads with IndexedDB retry queue
    * Detects blob URLs and uploads them to Firebase Storage
+   * Saves to IndexedDB before upload for retry on refresh
    */
   const handleAssetUpload = async (assetId: string, assetSrc: string): Promise<void> => {
     if (!userId || !editor) return;
@@ -207,18 +210,28 @@ export function useShapes({
       // Convert to File
       const file = new File([blob], `${assetId}.${ext}`, { type: mimeType });
       
+      console.log('[useShapes] 💾 Saving to IndexedDB retry queue before upload...');
+      
+      // STEP 1: Save blob to IndexedDB BEFORE upload (for retry on refresh)
+      await savePendingAsset(assetId, blob, {
+        roomId,
+        mimeType,
+        size: file.size,
+        retryCount: 0,
+      });
+      
       console.log('[useShapes] 📤 Uploading to Firebase Storage:', { 
         assetId, 
         size: `${(file.size / 1024).toFixed(2)}KB`,
         mimeType 
       });
 
-      // Upload to Storage and save record
-      const assetRecord = await processAssetUpload(file, assetId, roomId, userId);
+      // STEP 2: Upload to Storage and save record (pending → ready)
+      const assetRecord = await processAssetUpload(file, assetId, roomId, userId, assetSrc);
 
       console.log('[useShapes] ✅ Upload complete, updating tldraw asset with permanent URL');
 
-      // Update asset in tldraw with permanent URL
+      // STEP 3: Update asset in tldraw with permanent URL
       editor.store.mergeRemoteChanges(() => {
         const asset = editor.getAsset(assetId as any);
         if (asset && asset.type === 'image') {
@@ -232,14 +245,49 @@ export function useShapes({
         }
       });
 
-      console.log('[useShapes] 🎉 Asset fully uploaded and updated:', assetId);
+      // STEP 4: Remove from IndexedDB queue (upload successful)
+      await removePendingAsset(assetId);
+      console.log('[useShapes] 🎉 Asset fully uploaded and removed from retry queue:', assetId);
     } catch (err) {
       console.error('[useShapes] ❌ Error handling asset upload:', err);
+      // Blob remains in IndexedDB for retry on next mount
       setError(err instanceof Error ? err : new Error("Failed to upload asset"));
     } finally {
       processingAssetsRef.current.delete(assetId);
     }
   };
+
+  /**
+   * Retry pending uploads from IndexedDB on mount
+   * This handles uploads that were interrupted by refresh/close
+   */
+  useEffect(() => {
+    if (!editor || !userId || !roomId || !enabled) {
+      return;
+    }
+
+    // Retry pending uploads
+    retryPendingUploads(roomId, userId, (assetId, downloadURL) => {
+      // Callback when asset becomes ready - update tldraw
+      if (!editor) return;
+      
+      editor.store.mergeRemoteChanges(() => {
+        const asset = editor.getAsset(assetId as any);
+        if (asset && asset.type === 'image') {
+          editor.updateAssets([{
+            ...asset,
+            props: {
+              ...asset.props,
+              src: downloadURL,
+            },
+          }]);
+          console.log('[useShapes] 🔄 Retry complete - asset updated in tldraw:', assetId);
+        }
+      });
+    }).catch(err => {
+      console.error('[useShapes] Error retrying pending uploads:', err);
+    });
+  }, [editor, userId, roomId, enabled]);
 
   /**
    * Load initial shapes and assets from Firestore on mount
@@ -262,10 +310,18 @@ export function useShapes({
         
         // Load assets first
         const assets = await getAllAssets(roomId);
-        console.log(`[useShapes] Loaded ${assets.length} assets from Firestore`);
+        console.log(`[useShapes] Loaded ${assets.length} assets from Firestore (pending + ready)`);
 
-        // Create a map of asset IDs to permanent URLs
-        const assetUrlMap = new Map(assets.map(a => [a.id, a.src]));
+        // Separate pending and ready assets
+        const readyAssets = assets.filter(a => a.status === 'ready');
+        const pendingAssets = assets.filter(a => a.status === 'pending');
+        
+        if (pendingAssets.length > 0) {
+          console.log(`[useShapes] ⏳ Found ${pendingAssets.length} pending assets (uploads in progress or failed)`);
+        }
+
+        // Create a map of asset IDs to permanent URLs (only ready assets)
+        const assetUrlMap = new Map(readyAssets.map(a => [a.id, a.src]));
 
         // Try to load full snapshot first (includes pages + shapes)
         const snapshotWithMeta = await loadSnapshot(roomId);
@@ -375,11 +431,11 @@ export function useShapes({
 
           // Apply shapes AND assets to editor using mergeRemoteChanges
           editor.store.mergeRemoteChanges(() => {
-            // First, restore assets to the editor
-            if (assets.length > 0) {
-              console.log('[useShapes] Restoring assets to editor:', assets.length);
+            // First, restore assets to the editor (only ready assets)
+            if (readyAssets.length > 0) {
+              console.log('[useShapes] Restoring ready assets to editor:', readyAssets.length);
               
-              const tldrawAssets = assets.map((assetRecord) => ({
+              const tldrawAssets = readyAssets.map((assetRecord) => ({
                 id: assetRecord.id as any,
                 type: 'image' as const,
                 typeName: 'asset' as const,
@@ -395,8 +451,11 @@ export function useShapes({
               }));
               
               editor.createAssets(tldrawAssets);
-              console.log('[useShapes] ✅ Assets restored to editor');
+              console.log('[useShapes] ✅ Ready assets restored to editor');
             }
+            
+            // Note: Pending assets are not loaded into editor yet
+            // They will be added when retry completes and status changes to 'ready'
 
             // Then restore shapes
             shapes.forEach((firestoreShape) => {
@@ -794,28 +853,58 @@ export function useShapes({
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
 
+    // Check if smooth remote drag is enabled
+    const smoothDragEnabled = process.env.NEXT_PUBLIC_SMOOTH_REMOTE_DRAG === 'true';
+    
+    // Initialize drag smoother if enabled
+    const dragSmoother = smoothDragEnabled ? new RemoteDragSmoother((shapeId, x, y) => {
+      // Apply position callback - updates tldraw editor
+      try {
+        const shape = editor?.getShape(shapeId as TLShapeId);
+        if (shape && editor) {
+          isSyncingRef.current = true;
+          editor.updateShape({
+            id: shapeId as TLShapeId,
+            type: shape.type,
+            x,
+            y,
+          });
+          isSyncingRef.current = false;
+        }
+      } catch (err) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[useShapes] Error in smoother apply:", err);
+        }
+      }
+    }) : null;
+
     // Listen to remote drag updates from other users
     const unsubscribeDrag = listenToDragUpdates(roomId, (updates) => {
       if (!editor) return;
 
       updates.forEach((update) => {
-        // Ignore our own drag updates
+        // Ignore our own drag updates (echo suppression)
         if (update.userId === userId) {
           return;
         }
 
         try {
-          // Update shape position locally (don't sync back to avoid loops)
-          const shape = editor.getShape(update.shapeId as TLShapeId);
-          if (shape) {
-            isSyncingRef.current = true;
-            editor.updateShape({
-              id: update.shapeId as TLShapeId,
-              type: shape.type,
-              x: update.x,
-              y: update.y,
-            });
-            isSyncingRef.current = false;
+          if (smoothDragEnabled && dragSmoother) {
+            // Use smoother for interpolated, jitter-free movement
+            dragSmoother.applyUpdate(update.shapeId, { x: update.x, y: update.y });
+          } else {
+            // Direct apply (original behavior - immediate but can be jerky)
+            const shape = editor.getShape(update.shapeId as TLShapeId);
+            if (shape) {
+              isSyncingRef.current = true;
+              editor.updateShape({
+                id: update.shapeId as TLShapeId,
+                type: shape.type,
+                x: update.x,
+                y: update.y,
+              });
+              isSyncingRef.current = false;
+            }
           }
         } catch (err) {
           if (process.env.NODE_ENV === "development") {
@@ -834,6 +923,12 @@ export function useShapes({
       // Clear any ongoing drag state
       if (draggedShapeId) {
         void clearDragPosition(roomId, draggedShapeId);
+      }
+      
+      // Stop and cleanup drag smoother if enabled
+      if (dragSmoother) {
+        dragSmoother.stop();
+        dragSmoother.clear();
       }
     };
   }, [editor, userId, roomId, enabled]);

@@ -250,3 +250,40 @@ export async function withRetry<T>(
     : new Error("Operation failed after retries");
 }
 
+/**
+ * Calculates Euclidean distance between two points
+ * Used for distance guards in remote drag smoothing
+ * 
+ * @param p1 - First point with x, y coordinates
+ * @param p2 - Second point with x, y coordinates
+ * @returns Distance in pixels
+ * 
+ * @example
+ * const dist = distance({x: 0, y: 0}, {x: 3, y: 4}); // Returns 5
+ */
+export function distance(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number }
+): number {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Linear interpolation between two values
+ * Used for smooth position transitions in remote drag
+ * 
+ * @param from - Start value
+ * @param to - End value
+ * @param t - Interpolation factor (0 to 1)
+ * @returns Interpolated value
+ * 
+ * @example
+ * lerp(0, 100, 0.5);  // Returns 50
+ * lerp(0, 100, 0.25); // Returns 25
+ */
+export function lerp(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
+}
+

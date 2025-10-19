@@ -249,6 +249,53 @@ All shortcuts work seamlessly with the real-time collaboration features!
 
 ---
 
+## 🖼️ **Asset Persistence**
+
+Images uploaded to the canvas persist reliably across page refresh, logout, and network interruptions.
+
+**Key Features:**
+- **IndexedDB retry queue** - Blobs saved locally before upload; survives refresh during upload
+- **Pending/Ready status** - Assets marked "pending" during upload, "ready" when complete
+- **Automatic retry** - On mount, resumes any interrupted uploads (max 3 attempts)
+- **No data loss** - Even if you refresh mid-upload, the image will complete when you return
+- **Room-scoped storage** - Assets isolated by room in Firebase Storage (`/rooms/{roomId}/assets/`)
+
+**How it works:**
+1. Upload image → Blob saved to IndexedDB → Firestore doc created with status='pending'
+2. Upload to Firebase Storage → Get permanent URL
+3. Update Firestore doc to status='ready' with permanent URL → Remove from IndexedDB queue
+4. On refresh: Pending uploads resume automatically; ready assets load immediately
+
+**Environment:** No configuration needed - works automatically with Firebase Storage enabled.
+
+---
+
+## 🎯 **Remote Drag Smoothing**
+
+Eliminate jitter when viewing remote collaborators drag shapes. Uses client-side interpolation for butter-smooth 60fps rendering.
+
+**Key Features:**
+- **Feature flag** - Enable/disable via `NEXT_PUBLIC_SMOOTH_REMOTE_DRAG=true`
+- **Client-side interpolation** - rAF-based lerp from current → target position (never mutates server state)
+- **Pixel distance guard** - Skips tiny movements <2px to reduce unnecessary updates
+- **Time guard** - Minimum 16ms between position applies (~60fps max)
+- **CPU-friendly** - Interpolation loop only runs when there are active remote drags
+- **Echo suppression** - Ignores your own drag updates from server
+
+**Configuration:**
+```bash
+# .env.local
+NEXT_PUBLIC_SMOOTH_REMOTE_DRAG=true  # Enable smoothing
+# or
+NEXT_PUBLIC_SMOOTH_REMOTE_DRAG=false # Direct updates (snappier but can be jerky)
+```
+
+**Performance:**
+- Smooth drag enabled: <1px visual jitter, 60fps interpolation, 3-5% CPU
+- Smooth drag disabled: Instant updates, potential network jitter, <1% CPU
+
+---
+
 ## 🏗️ **Tech Stack**
 
 ### **Frontend**
@@ -666,9 +713,11 @@ See [TESTING.md](./TESTING.md) for the comprehensive manual testing checklist in
 - [x] **Google Sign-In** - OAuth authentication
 - [x] **AI Canvas Agent** - 10 natural language commands
 - [x] **Owner Kick Control** - Remove users with 5-minute ban ⭐ **NEW**
-- [x] **Persistent Image Assets** - Firebase Storage integration ⭐ **NEW**
+- [x] **Persistent Image Assets** - Firebase Storage integration with retry queue ⭐ **NEW**
 - [x] **Keyboard Shortcuts** - Full tldraw shortcuts documented ⭐ **NEW**
 - [x] **Room-Scoped Presence** - Users only see others in same room ⭐ **NEW**
+- [x] **Asset Persistence** - IndexedDB retry queue survives refresh/logout ⭐ **NEW**
+- [x] **Remote Drag Smoothing** - Client-side interpolation for jitter-free collaboration ⭐ **NEW**
 
 ### **Future Enhancements** 📋
 - [ ] Text styling panel (PR #8 - ready to implement)

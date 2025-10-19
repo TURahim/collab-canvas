@@ -12,7 +12,8 @@ import type { Timestamp } from "firebase/firestore";
 export interface AssetRecord {
   id: string;
   type: "image";
-  src: string; // Firebase Storage download URL
+  status: "pending" | "ready"; // Upload status - pending during upload, ready when complete
+  src: string; // Blob URL (pending) or Firebase Storage download URL (ready)
   mimeType: string; // 'image/png', 'image/jpeg', 'image/gif', 'image/webp'
   size: number; // File size in bytes
   uploadedBy: string; // User ID who uploaded

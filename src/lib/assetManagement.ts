@@ -26,6 +26,13 @@ import {
 import { db, storage } from "./firebase";
 import type { AssetRecord } from "../types/asset";
 import { isSupportedImageType, MAX_ASSET_SIZE } from "../types/asset";
+import { 
+  savePendingAsset, 
+  getPendingAssets, 
+  removePendingAsset,
+  incrementRetryCount,
+  type PendingAssetBlob 
+} from "./indexedDB";
 
 /**
  * Uploads an image asset to Firebase Storage
@@ -225,47 +232,164 @@ export async function deleteAsset(
 }
 
 /**
- * Processes a tldraw asset upload
- * Handles the full flow: upload to Storage + save record to Firestore
+ * Processes a tldraw asset upload with pending/ready status flow
+ * Handles the full flow:
+ * 1. Write Firestore doc with status='pending' immediately
+ * 2. Upload to Storage
+ * 3. Update Firestore doc to status='ready' with downloadURL
+ * 
+ * This ensures assets persist even if upload is interrupted
  * 
  * @param file - File to upload
  * @param assetId - tldraw asset ID
  * @param roomId - Room ID
  * @param userId - User ID uploading
+ * @param blobUrl - Optional blob URL for pending state
  * @returns Promise resolving to complete AssetRecord with download URL
  */
 export async function processAssetUpload(
   file: File,
   assetId: string,
   roomId: string,
-  userId: string
+  userId: string,
+  blobUrl?: string
 ): Promise<AssetRecord> {
   try {
-    // Upload to Storage and get URL
-    const downloadURL = await uploadAssetToStorage(file, roomId, assetId, userId);
-
-    // Create asset record
-    const assetRecord: Omit<AssetRecord, "createdAt"> = {
+    // STEP 1: Write pending record immediately to Firestore
+    const pendingRecord: Omit<AssetRecord, "createdAt"> = {
       id: assetId,
       type: "image",
-      src: downloadURL,
+      status: "pending",
+      src: blobUrl || '', // Use blob URL as temp src
       mimeType: file.type,
       size: file.size,
       uploadedBy: userId,
       roomId,
     };
 
-    // Save to Firestore
-    await saveAssetRecord(roomId, assetId, assetRecord);
+    await saveAssetRecord(roomId, assetId, pendingRecord);
+    console.log("[AssetManagement] 📝 Pending asset record created:", assetId);
+
+    // STEP 2: Upload to Storage and get permanent URL
+    const downloadURL = await uploadAssetToStorage(file, roomId, assetId, userId);
+    console.log("[AssetManagement] ✅ Asset uploaded to Storage:", assetId);
+
+    // STEP 3: Update record to ready with permanent URL
+    const readyRecord: Omit<AssetRecord, "createdAt"> = {
+      ...pendingRecord,
+      status: "ready",
+      src: downloadURL,
+    };
+
+    await saveAssetRecord(roomId, assetId, readyRecord);
+    console.log("[AssetManagement] ✅ Asset record updated to ready:", assetId);
 
     // Return complete record (createdAt will be set by server)
     return {
-      ...assetRecord,
+      ...readyRecord,
       createdAt: { seconds: Date.now() / 1000, nanoseconds: 0 } as any,
     };
   } catch (error) {
     console.error("[AssetManagement] Error processing asset upload:", error);
     throw error;
+  }
+}
+
+/**
+ * Max retry attempts for pending uploads
+ */
+const MAX_RETRY_ATTEMPTS = 3;
+
+/**
+ * Retries all pending asset uploads from IndexedDB
+ * Called on mount to resume uploads that were interrupted by refresh/close
+ * 
+ * @param currentRoomId - Current room ID
+ * @param currentUserId - Current user ID
+ * @param onAssetReady - Callback when asset transitions from pending to ready
+ * @returns Promise that resolves when all retries are processed
+ */
+export async function retryPendingUploads(
+  currentRoomId: string,
+  currentUserId: string,
+  onAssetReady?: (assetId: string, downloadURL: string) => void
+): Promise<void> {
+  try {
+    const pendingAssets = await getPendingAssets();
+    
+    if (pendingAssets.length === 0) {
+      console.log('[AssetManagement] No pending uploads to retry');
+      return;
+    }
+
+    console.log(`[AssetManagement] 🔄 Retrying ${pendingAssets.length} pending uploads...`);
+
+    // Process each pending asset
+    for (const pending of pendingAssets) {
+      // Skip if over retry limit
+      if (pending.retryCount >= MAX_RETRY_ATTEMPTS) {
+        console.warn('[AssetManagement] ❌ Max retries reached for asset:', pending.assetId);
+        await removePendingAsset(pending.assetId);
+        continue;
+      }
+
+      // Only retry assets for current room
+      if (pending.roomId !== currentRoomId) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[AssetManagement] Skipping asset from different room:', pending.assetId);
+        }
+        continue;
+      }
+
+      try {
+        console.log('[AssetManagement] 🔄 Retrying upload:', {
+          assetId: pending.assetId,
+          attempt: pending.retryCount + 1,
+          maxAttempts: MAX_RETRY_ATTEMPTS,
+        });
+
+        // Increment retry count
+        await incrementRetryCount(pending.assetId);
+
+        // Convert blob to File
+        const file = new File([pending.blob], `${pending.assetId}.${pending.mimeType.split('/')[1]}`, {
+          type: pending.mimeType,
+        });
+
+        // Upload to Storage
+        const downloadURL = await uploadAssetToStorage(file, pending.roomId, pending.assetId, currentUserId);
+        
+        // Update Firestore record to ready
+        const readyRecord: Omit<AssetRecord, "createdAt"> = {
+          id: pending.assetId,
+          type: "image",
+          status: "ready",
+          src: downloadURL,
+          mimeType: pending.mimeType,
+          size: pending.size,
+          uploadedBy: currentUserId,
+          roomId: pending.roomId,
+        };
+
+        await saveAssetRecord(pending.roomId, pending.assetId, readyRecord);
+        console.log('[AssetManagement] ✅ Retry successful, asset ready:', pending.assetId);
+
+        // Remove from IndexedDB queue
+        await removePendingAsset(pending.assetId);
+
+        // Notify callback
+        if (onAssetReady) {
+          onAssetReady(pending.assetId, downloadURL);
+        }
+      } catch (error) {
+        console.error('[AssetManagement] ❌ Retry failed for asset:', pending.assetId, error);
+        // Keep in queue for next retry (already incremented count)
+      }
+    }
+
+    console.log('[AssetManagement] ✅ Finished processing pending uploads');
+  } catch (error) {
+    console.error('[AssetManagement] Error retrying pending uploads:', error);
   }
 }
 

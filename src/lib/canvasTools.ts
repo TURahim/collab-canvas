@@ -17,7 +17,7 @@
  * 5. Select created shapes automatically
  */
 
-import { type Editor, type TLShapeId, toRichText, createShapeId } from '@tldraw/tldraw';
+import { type Editor, type TLShapeId, type TLShape, toRichText, createShapeId } from '@tldraw/tldraw';
 
 /**
  * Shape definition interface for batch creation
@@ -124,6 +124,133 @@ function getViewportCenter(editor: Editor): { x: number; y: number } {
     x: viewport.x + viewport.width / 2,
     y: viewport.y + viewport.height / 2,
   };
+}
+
+/**
+ * Resolve position keyword to absolute page coordinate
+ * Captures viewport once to avoid race conditions during pan/zoom
+ * 
+ * @param editor - tldraw editor instance
+ * @param keyword - Position keyword or number
+ * @param axis - 'x' or 'y'
+ * @returns Absolute page coordinate
+ */
+function resolvePositionKeyword(
+  editor: Editor,
+  keyword: string | number,
+  axis: 'x' | 'y'
+): number {
+  if (typeof keyword === 'number') return keyword;
+  
+  const viewport = editor.getViewportPageBounds();
+  
+  if (axis === 'x') {
+    switch (keyword.toLowerCase()) {
+      case 'center': return viewport.x + viewport.width / 2;
+      case 'left': return viewport.x + 100;
+      case 'right': return viewport.x + viewport.width - 100;
+      default: return viewport.x + viewport.width / 2;
+    }
+  } else {
+    switch (keyword.toLowerCase()) {
+      case 'center': return viewport.y + viewport.height / 2;
+      case 'top': return viewport.y + 100;
+      case 'bottom': return viewport.y + viewport.height - 100;
+      default: return viewport.y + viewport.height / 2;
+    }
+  }
+}
+
+/**
+ * Calculate union bounds of multiple shapes
+ * Returns bounding box that encompasses all shapes (preserves layout)
+ * Uses editor.getShapePageBounds() to properly handle rotation, groups, and transforms
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapes - Array of tldraw shapes
+ * @returns Union bounds with center point
+ */
+function getUnionBounds(editor: Editor, shapes: TLShape[]): { 
+  x: number; 
+  y: number; 
+  width: number; 
+  height: number;
+  centerX: number;
+  centerY: number;
+} {
+  if (shapes.length === 0) {
+    throw new Error('Cannot compute bounds of empty shape array');
+  }
+  
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  
+  shapes.forEach((shape) => {
+    // Use editor.getShapePageBounds() for accurate bounds (handles rotation, groups, transforms)
+    const bounds = editor.getShapePageBounds(shape.id);
+    if (!bounds) return; // Skip if bounds cannot be determined
+    
+    minX = Math.min(minX, bounds.minX);
+    minY = Math.min(minY, bounds.minY);
+    maxX = Math.max(maxX, bounds.maxX);
+    maxY = Math.max(maxY, bounds.maxY);
+  });
+  
+  const width = maxX - minX;
+  const height = maxY - minY;
+  
+  return {
+    x: minX,
+    y: minY,
+    width,
+    height,
+    centerX: minX + width / 2,
+    centerY: minY + height / 2,
+  };
+}
+
+/**
+ * Validate shapes can be moved
+ * Returns valid and invalid shapes with reasons
+ * 
+ * @param editor - tldraw editor instance
+ * @param shapes - Array of shapes to validate
+ * @returns Object with valid and invalid shape arrays
+ */
+function validateMovableShapes(editor: Editor, shapes: any[]): {
+  valid: any[];
+  invalid: Array<{ shape: any; reason: string }>;
+} {
+  const valid: any[] = [];
+  const invalid: Array<{ shape: any; reason: string }> = [];
+  
+  const currentPage = editor.getCurrentPageId();
+  
+  shapes.forEach((shape) => {
+    // Check if shape exists
+    if (!shape) {
+      invalid.push({ shape, reason: 'Shape does not exist' });
+      return;
+    }
+    
+    // Check if on current page
+    if (shape.parentId !== currentPage) {
+      invalid.push({ shape, reason: 'Shape is on a different page' });
+      return;
+    }
+    
+    // Check if locked
+    if (shape.isLocked) {
+      invalid.push({ shape, reason: 'Shape is locked' });
+      return;
+    }
+    
+    valid.push(shape);
+  });
+  
+  return { valid, invalid };
 }
 
 /**
@@ -372,6 +499,181 @@ export function moveShape(
 }
 
 /**
+ * Move shapes to absolute position (supports keywords)
+ * Preserves relative layout by moving union bounds, not individual shapes
+ * Uses editor.run() to group updates into single transaction
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Move parameters with keyword support
+ * @returns Result with count, moved IDs, skipped shapes, and whether movement actually occurred
+ */
+export interface MoveShapeToParams {
+  target: 'selected' | 'all' | TLShapeId | TLShapeId[];
+  x?: string | number; // 'center' | 'left' | 'right' | number
+  y?: string | number; // 'center' | 'top' | 'bottom' | number
+  deltaX?: number; // Backward compat: relative movement
+  deltaY?: number; // Backward compat: relative movement
+}
+
+export function moveShapeTo(
+  editor: Editor,
+  params: MoveShapeToParams
+): { 
+  count: number; 
+  moved: TLShapeId[];
+  skipped: Array<{ id: TLShapeId | undefined; reason: string }>;
+  actuallyMoved: boolean;
+} {
+  if (!editor) {
+    throw new Error('Editor is required');
+  }
+
+  const { target, x, y, deltaX, deltaY } = params;
+  
+  // Backward compatibility: if deltaX/deltaY provided, use relative movement
+  if (deltaX !== undefined || deltaY !== undefined) {
+    return moveShapesByDelta(editor, { target, deltaX: deltaX || 0, deltaY: deltaY || 0 });
+  }
+  
+  // Must provide at least x or y
+  if (x === undefined && y === undefined) {
+    throw new Error('Must provide at least one of: x, y, deltaX, deltaY');
+  }
+  
+  // Resolve target shapes
+  let shapes: any[];
+  if (target === 'selected') {
+    shapes = editor.getSelectedShapes();
+    if (shapes.length === 0) {
+      throw new Error('No shapes selected. Please select at least one shape first.');
+    }
+  } else if (target === 'all') {
+    shapes = editor.getCurrentPageShapes();
+  } else if (Array.isArray(target)) {
+    shapes = target.map(id => editor.getShape(id)).filter(Boolean);
+  } else {
+    const shape = editor.getShape(target as TLShapeId);
+    shapes = shape ? [shape] : [];
+  }
+
+  // Validate movable shapes
+  const { valid, invalid } = validateMovableShapes(editor, shapes);
+  
+  if (valid.length === 0) {
+    const reasons = invalid.map(i => i.reason).join(', ');
+    throw new Error(`No movable shapes found. Reasons: ${reasons}`);
+  }
+
+  // Capture viewport once (avoid race conditions)
+  const targetX = x !== undefined ? resolvePositionKeyword(editor, x, 'x') : null;
+  const targetY = y !== undefined ? resolvePositionKeyword(editor, y, 'y') : null;
+
+  // Get union bounds of all shapes (to preserve layout)
+  const unionBounds = getUnionBounds(editor, valid);
+  
+  // Calculate delta to move union center to target
+  const deltaToCenter = {
+    x: targetX !== null ? targetX - unionBounds.centerX : 0,
+    y: targetY !== null ? targetY - unionBounds.centerY : 0,
+  };
+  
+  // Check if delta is significant (avoid no-op from rounding)
+  const MIN_MOVEMENT = 0.5; // pixels
+  const willActuallyMove = Math.abs(deltaToCenter.x) >= MIN_MOVEMENT || 
+                           Math.abs(deltaToCenter.y) >= MIN_MOVEMENT;
+  
+  if (!willActuallyMove) {
+    return {
+      count: valid.length,
+      moved: valid.map(s => s.id),
+      skipped: invalid.map(i => ({ id: i.shape?.id, reason: i.reason })),
+      actuallyMoved: false,
+    };
+  }
+
+  // Perform movement (wrapped in editor.run() for single undo entry)
+  const movedIds: TLShapeId[] = [];
+  
+  editor.run(() => {
+    valid.forEach((shape) => {
+      const newX = targetX !== null ? shape.x + deltaToCenter.x : shape.x;
+      const newY = targetY !== null ? shape.y + deltaToCenter.y : shape.y;
+      
+      editor.updateShape({
+        id: shape.id,
+        type: shape.type,
+        x: newX,
+        y: newY,
+      });
+      
+      movedIds.push(shape.id);
+    });
+  });
+
+  console.log(`[moveShapeTo] Moved ${movedIds.length} shapes by delta (${deltaToCenter.x.toFixed(1)}, ${deltaToCenter.y.toFixed(1)})`);
+  
+  return {
+    count: movedIds.length,
+    moved: movedIds,
+    skipped: invalid.map(i => ({ id: i.shape?.id, reason: i.reason })),
+    actuallyMoved: true,
+  };
+}
+
+/**
+ * Backward compatibility: move by relative delta
+ * Internal helper function for moveShapeTo
+ * 
+ * @param editor - tldraw editor instance
+ * @param params - Target and delta parameters
+ * @returns Result with count, moved IDs, skipped shapes, and whether movement actually occurred
+ */
+function moveShapesByDelta(
+  editor: Editor,
+  params: { target: any; deltaX: number; deltaY: number }
+): { count: number; moved: TLShapeId[]; skipped: Array<{ id: TLShapeId | undefined; reason: string }>; actuallyMoved: boolean } {
+  // Reuse validation logic
+  let shapes: any[];
+  if (params.target === 'selected') {
+    shapes = editor.getSelectedShapes();
+  } else if (params.target === 'all') {
+    shapes = editor.getCurrentPageShapes();
+  } else if (Array.isArray(params.target)) {
+    shapes = params.target.map(id => editor.getShape(id)).filter(Boolean);
+  } else {
+    const shape = editor.getShape(params.target);
+    shapes = shape ? [shape] : [];
+  }
+  
+  const { valid, invalid } = validateMovableShapes(editor, shapes);
+  
+  if (valid.length === 0) {
+    throw new Error('No movable shapes found');
+  }
+  
+  const movedIds: TLShapeId[] = [];
+  
+  editor.run(() => {
+    valid.forEach((shape) => {
+      editor.updateShape({
+        id: shape.id,
+        type: shape.type,
+        x: shape.x + params.deltaX,
+        y: shape.y + params.deltaY,
+      });
+      movedIds.push(shape.id);
+    });
+  });
+  
+  return {
+    count: movedIds.length,
+    moved: movedIds,
+    skipped: invalid.map(i => ({ id: i.shape?.id, reason: i.reason })),
+    actuallyMoved: Math.abs(params.deltaX) > 0.5 || Math.abs(params.deltaY) > 0.5,
+  };
+}
+
+/**
  * Transform a shape (resize, rotate)
  * 
  * @param editor - tldraw editor instance
@@ -473,15 +775,17 @@ export function arrangeShapes(
 
     let currentX = center.x - totalWidth / 2;
 
-    shapes.forEach((shape: any) => {
-      const width = shape.type === 'geo' ? shape.props.w : 200;
-      editor.updateShape({
-        id: shape.id,
-        type: shape.type,
-        x: currentX,
-        y: center.y - (shape.type === 'geo' ? shape.props.h / 2 : 25),
+    editor.run(() => {
+      shapes.forEach((shape: any) => {
+        const width = shape.type === 'geo' ? shape.props.w : 200;
+        editor.updateShape({
+          id: shape.id,
+          type: shape.type,
+          x: currentX,
+          y: center.y - (shape.type === 'geo' ? shape.props.h / 2 : 25),
+        });
+        currentX += width + spacing;
       });
-      currentX += width + spacing;
     });
   } else if (pattern === 'vertical') {
     const totalHeight = shapes.reduce((sum, shape: any) => {
@@ -491,15 +795,17 @@ export function arrangeShapes(
 
     let currentY = center.y - totalHeight / 2;
 
-    shapes.forEach((shape: any) => {
-      const height = shape.type === 'geo' ? shape.props.h : 50;
-    editor.updateShape({
-      id: shape.id,
-      type: shape.type,
-        x: center.x - (shape.type === 'geo' ? shape.props.w / 2 : 100),
-        y: currentY,
+    editor.run(() => {
+      shapes.forEach((shape: any) => {
+        const height = shape.type === 'geo' ? shape.props.h : 50;
+      editor.updateShape({
+        id: shape.id,
+        type: shape.type,
+          x: center.x - (shape.type === 'geo' ? shape.props.w / 2 : 100),
+          y: currentY,
+        });
+        currentY += height + spacing;
       });
-      currentY += height + spacing;
     });
   } else if (pattern === 'grid') {
     const cols = Math.ceil(Math.sqrt(shapes.length));
@@ -509,17 +815,19 @@ export function arrangeShapes(
     const totalWidth = cols * cellWidth;
     const totalHeight = rows * cellHeight;
 
-    shapes.forEach((shape: any, index) => {
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      const x = center.x - totalWidth / 2 + col * cellWidth + cellWidth / 2;
-      const y = center.y - totalHeight / 2 + row * cellHeight + cellHeight / 2;
+    editor.run(() => {
+      shapes.forEach((shape: any, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        const x = center.x - totalWidth / 2 + col * cellWidth + cellWidth / 2;
+        const y = center.y - totalHeight / 2 + row * cellHeight + cellHeight / 2;
 
-      editor.updateShape({
-        id: shape.id,
-        type: shape.type,
-        x: x - (shape.type === 'geo' ? shape.props.w / 2 : 100),
-        y: y - (shape.type === 'geo' ? shape.props.h / 2 : 25),
+        editor.updateShape({
+          id: shape.id,
+          type: shape.type,
+          x: x - (shape.type === 'geo' ? shape.props.w / 2 : 100),
+          y: y - (shape.type === 'geo' ? shape.props.h / 2 : 25),
+        });
       });
     });
   }

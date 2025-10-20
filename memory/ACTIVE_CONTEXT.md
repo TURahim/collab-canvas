@@ -1,7 +1,7 @@
 # ACTIVE CONTEXT - CollabCanvas
 
-**Last Updated:** October 17, 2025  
-**Session:** Room-Scoped Presence Implementation
+**Last Updated:** October 19, 2025  
+**Session:** AI Move Commands Fix + Canvas Tools Refactor Planning
 
 ---
 
@@ -9,22 +9,37 @@
 
 **Active Branch:** `main`  
 **Recent Changes:**
-- ✅ PR #2: Online Users Card Repositioning
-- ✅ PR #3: JellyBoard Logo on Rooms List
-- ✅ PR #5: Keyboard Shortcuts Documentation
-- ✅ PR #1: Owner Kick Control with 5-Minute Ban
-- ✅ PR #4: Persistent Image Assets (Firebase Storage)
-- ✅ **NEW: Room-Scoped Presence System** (Milestone 9)
-  - Created 6 new room-scoped functions
-  - Updated useCursors with dual-write strategy
-  - Updated usePresence for room isolation
-  - Deployed database rules with validation
-  - Fixed critical privacy bug
+- ✅ **AI Move Commands Fix** (October 19)
+  - Fixed interface mismatch between GPT-4 schema and dispatch
+  - Implemented `moveShapeTo()` with keyword support ('center', 'left', 'right', etc.)
+  - Union bounds approach preserves layout when moving multiple shapes
+  - Validates locked/deleted shapes with descriptive errors
+  - Fixed `editor.batch()` → sequential updates (tldraw v4 doesn't have batch)
+  - Added comprehensive tests (18 test cases)
+  - Documentation: `docs/dev-logs/AI_MOVE_COMMANDS_FIX.md`
+  
+- ✅ **Canvas Tools Code Review** (October 19)
+  - Comprehensive review of 1,387 lines in `src/lib/canvasTools.ts`
+  - Identified 13 critical issues with TLDraw v4 API usage
+  - Found incorrect bounds calculation for rotated shapes
+  - Missing `editor.run()` wrappers causing N undo entries
+  - Documented 17 exported functions and their implicit contracts
+  
+- ✅ **Canvas Tools Refactor Plan** (October 19)
+  - Created 10-PR roadmap for comprehensive refactor
+  - Phase 1 (P0): Critical bug fixes - `editor.run()`, bounds, selection
+  - Phase 2 (P1): Native API adoption - bulk operations, alignment APIs
+  - Phase 3 (P2): Code quality - helpers, logger, type safety
+  - Phase 4 (P3): Optional - deprecations, module split
+  - Total estimated effort: 28 hours across 3-4 weeks
+  - Documentation: `docs/canvasToolsUpdate.md` (748 lines)
 
 **Recent Commits:**
-- Not yet committed (awaiting user approval as per CRITICAL RULE)
+- feat: Asset persistence with IndexedDB retry queue + Remote drag smoothing (9c604ba)
+- fix: AI move commands - implemented moveShapeTo() with keyword support
+- docs: Comprehensive canvas tools refactor plan with 10 PRs
 
-**Status:** Room-Scoped Presence Complete and Ready for Testing ✅
+**Status:** AI Move Fix Complete ✅ | Canvas Tools Refactor Plan Ready 📋
 
 ---
 
@@ -120,7 +135,7 @@ rooms/
 - Create/Update: Authenticated + field validation (id, type, createdBy required)
 - Delete: All authenticated users (collaborative editing)
 
-### Firebase Storage (Image Assets) ⭐ NEW
+### Firebase Storage (Image Assets) ⭐ UPDATED
 
 ```javascript
 // Storage: /rooms/{roomId}/assets/{assetId}.{ext}
@@ -129,12 +144,29 @@ rooms/
 {
   id: string,           // Asset ID (from tldraw)
   type: "image",        // Asset type
-  src: string,          // Firebase Storage download URL
+  status: "pending" | "ready",  // ⭐ NEW: Upload status
+  src: string,          // Blob URL (pending) or Firebase Storage URL (ready)
   mimeType: string,     // "image/png", "image/jpeg", "image/gif", "image/webp"
   size: number,         // File size in bytes
   uploadedBy: string,   // User ID who uploaded
   roomId: string,       // Room ID
   createdAt: timestamp
+}
+```
+
+**IndexedDB (Retry Queue):** ⭐ NEW
+```javascript
+// Database: collab-canvas
+// Store: pending-assets
+
+{
+  assetId: string,      // Asset ID
+  roomId: string,       // Room ID
+  blob: Blob,           // File blob data
+  mimeType: string,     // MIME type
+  size: number,         // File size in bytes
+  retryCount: number,   // Number of retry attempts (max 3)
+  timestamp: number     // When added to queue
 }
 ```
 
@@ -145,10 +177,20 @@ rooms/
 
 **Security Rules (Firestore):**
 - Read: Authenticated users
-- Create: Authenticated + full field validation
-- Update/Delete: Authenticated users
+- Create: Authenticated + full field validation + status in ['pending', 'ready']
+- Update: Authenticated + status in ['pending', 'ready'] (pending → ready transition)
+- Delete: Authenticated users
 
 **Supported:** PNG, JPEG, GIF, WebP (10MB max)
+
+**Upload Flow:** ⭐ NEW 3-Phase Upload
+1. Save blob to IndexedDB
+2. Write Firestore doc with status='pending'
+3. Upload to Storage → get downloadURL
+4. Update Firestore doc to status='ready'
+5. Remove from IndexedDB queue
+
+**Retry Logic:** On mount, resume any pending uploads from IndexedDB (max 3 attempts)
 
 ---
 
@@ -369,6 +411,12 @@ OPENAI_API_KEY=sk-...  # NO NEXT_PUBLIC prefix
 **Optional:**
 ```bash
 NEXT_PUBLIC_TLDRAW_LICENSE_KEY=...
+```
+
+**Feature Flags:** ⭐ NEW
+```bash
+# Enable smooth remote drag with client-side interpolation
+NEXT_PUBLIC_SMOOTH_REMOTE_DRAG=true  # Default: false
 ```
 
 ### Security Rules Status

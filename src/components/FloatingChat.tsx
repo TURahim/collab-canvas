@@ -14,7 +14,7 @@ import type { Message } from '@/types/ai';
 import { ChatMessage } from './ChatMessage';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { executeAICommand, parseAIError } from '@/lib/aiService';
-import { createShape, createTextShape, moveShape, transformShape, arrangeShapes, createGrid, createLoginForm, createCard, createNavigationBar, createCheckboxList } from '@/lib/canvasTools';
+import { createShape, createTextShape, moveShape, moveShapeTo, transformShape, arrangeShapes, createGrid, createLoginForm, createCard, createNavigationBar, createCheckboxList } from '@/lib/canvasTools';
 
 interface FloatingChatProps {
   editor: Editor | null;
@@ -204,27 +204,34 @@ export function FloatingChat({ editor }: FloatingChatProps) {
               
             case 'moveShape':
               {
-                // Get selected shapes
-                const selectedShapes = editor.getSelectedShapes();
-                if (selectedShapes.length === 0) {
-                  addMessage('system', '❌ No shapes selected. Please select at least one shape first.');
-                  break;
-                }
-                
-                // Move each selected shape
-                const deltaX = (args as any).deltaX as number || 0;
-                const deltaY = (args as any).deltaY as number || 0;
-                
-                selectedShapes.forEach(shape => {
-                  moveShape(editor, {
-                    shapeId: shape.id,
-                    deltaX,
-                    deltaY,
+                try {
+                  const result = moveShapeTo(editor, {
+                    target: (args as any).target || 'selected',
+                    x: (args as any).x,
+                    y: (args as any).y,
+                    deltaX: (args as any).deltaX,
+                    deltaY: (args as any).deltaY,
                   });
-                });
-                
-                const count = selectedShapes.length;
-                addMessage('system', `✅ Moved ${count} shape${count > 1 ? 's' : ''} by (${deltaX}, ${deltaY})`);
+                  
+                  // Build descriptive success message
+                  if (!result.actuallyMoved) {
+                    addMessage('system', `ℹ️ ${result.count} shape${result.count > 1 ? 's are' : ' is'} already at the target position`);
+                  } else {
+                    const positionDesc = [];
+                    if ((args as any).x !== undefined) positionDesc.push(`x: ${(args as any).x}`);
+                    if ((args as any).y !== undefined) positionDesc.push(`y: ${(args as any).y}`);
+                    const posStr = positionDesc.length > 0 ? ` to ${positionDesc.join(', ')}` : '';
+                    
+                    let message = `✅ Moved ${result.count} shape${result.count > 1 ? 's' : ''}${posStr}`;
+                    if (result.skipped.length > 0) {
+                      message += ` (${result.skipped.length} skipped: locked or on different page)`;
+                    }
+                    addMessage('system', message);
+                  }
+                } catch (error) {
+                  const errMsg = error instanceof Error ? error.message : 'Unknown error';
+                  addMessage('system', `❌ ${errMsg}`);
+                }
               }
               break;
               

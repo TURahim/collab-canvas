@@ -15,6 +15,29 @@ service firebase.storage {
       // Allow delete if user is authenticated
       allow delete: if request.auth != null;
     }
+    
+    // Version snapshots - compressed JSON files
+    match /rooms/{roomId}/versions/{versionFile} {
+      // Allow read if user is authenticated
+      allow read: if request.auth != null;
+      
+      // Allow write if user is authenticated
+      allow write: if request.auth != null;
+      
+      // Allow delete if user is authenticated
+      allow delete: if request.auth != null;
+    }
+    
+    // Content-addressable assets - immutable storage
+    match /assets/{hash}/{fileName} {
+      // Allow read if user is authenticated
+      allow read: if request.auth != null;
+      
+      // Allow write if user is authenticated, file size is under 10MB, and is an image
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpeg|jpg|gif|webp)');
+    }
   }
 }
 

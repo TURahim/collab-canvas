@@ -26,6 +26,58 @@ const DEFAULT_USER_COLOR = "#999999";
 const HEARTBEAT_INTERVAL_MS = 10000; // 10 seconds
 
 /**
+ * Realtime sync pause state - used during snapshot restore
+ */
+let isRealtimePaused = false;
+let updateQueue: Array<() => void> = [];
+
+/**
+ * Pause realtime sync updates
+ * 
+ * When paused, incoming updates are queued but not applied to the editor.
+ * This is used during snapshot restoration to prevent sync conflicts.
+ */
+export function pauseRealtime(): void {
+  isRealtimePaused = true;
+  updateQueue = [];
+  console.log("[RealtimeSync] Paused - updates will be queued");
+}
+
+/**
+ * Resume realtime sync updates
+ * 
+ * Flushes any queued updates and resumes normal sync behavior.
+ */
+export function resumeRealtime(): void {
+  isRealtimePaused = false;
+  console.log("[RealtimeSync] Resumed - flushing", updateQueue.length, "queued updates");
+  updateQueue.forEach((fn) => fn());
+  updateQueue = [];
+}
+
+/**
+ * Check if updates should be applied
+ * 
+ * @returns True if updates should be applied, false if paused
+ */
+export function shouldApplyUpdate(): boolean {
+  return !isRealtimePaused;
+}
+
+/**
+ * Queue an update to be applied when sync resumes
+ * 
+ * @param updateFn - Function to execute when sync resumes
+ */
+export function queueUpdate(updateFn: () => void): void {
+  if (isRealtimePaused) {
+    updateQueue.push(updateFn);
+  } else {
+    updateFn();
+  }
+}
+
+/**
  * Raw user data structure from Firebase Realtime Database
  */
 interface RawUserData {

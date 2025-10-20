@@ -122,6 +122,29 @@ export async function getRoomMetadata(
 }
 
 /**
+ * Check if a user is a member of a room
+ * 
+ * @param roomId - Room ID to check
+ * @param userId - User ID to check
+ * @returns True if user is a member, false otherwise
+ */
+export async function isRoomMember(
+  roomId: string,
+  userId: string
+): Promise<boolean> {
+  try {
+    const metadata = await getRoomMetadata(roomId);
+    if (!metadata) return false;
+    
+    // Check if user is in members list
+    return metadata.members?.[userId] !== undefined;
+  } catch (error) {
+    console.error("[roomManagement] Error checking room membership:", error);
+    return false;
+  }
+}
+
+/**
  * Creates a new room
  */
 export async function createRoom(

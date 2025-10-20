@@ -20,6 +20,7 @@ import { FloatingChat } from "./FloatingChat";
 import RoomHeader from "./RoomHeader";
 import RoomSettings from "./RoomSettings";
 import ExportDialog from "./ExportDialog";
+import VersionHistoryModal from "./VersionHistoryModal";
 
 /**
  * CollabCanvas - Main collaborative whiteboard component
@@ -48,6 +49,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
   const [roomMetadata, setRoomMetadata] = useState<RoomMetadata | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
+  const [showVersionModal, setShowVersionModal] = useState<boolean>(false);
 
   /**
    * Debug: Check if Tldraw component is remounting and verify license key
@@ -241,6 +243,7 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
           userCount={Object.keys(roomMetadata.members || {}).length}
           onSettingsClick={() => setShowSettings(true)}
           onExportClick={() => setShowExportDialog(true)}
+          onVersionClick={() => setShowVersionModal(true)}
           onExitClick={() => router.push(getRoomsPath())}
         />
       )}
@@ -289,6 +292,17 @@ export default function CollabCanvas({ roomId: propRoomId }: CollabCanvasProps =
         onClose={() => setShowExportDialog(false)}
         editor={editor}
       />
+
+      {/* Version History Modal */}
+      {showVersionModal && user && roomMetadata && (
+        <VersionHistoryModal
+          roomId={roomId}
+          editor={editor}
+          userId={user.uid}
+          isOwner={roomMetadata.owner === user.uid}
+          onClose={() => setShowVersionModal(false)}
+        />
+      )}
     </div>
   );
 }

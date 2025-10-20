@@ -296,6 +296,86 @@ NEXT_PUBLIC_SMOOTH_REMOTE_DRAG=false # Direct updates (snappier but can be jerky
 
 ---
 
+## 🕰️ **Version History with Restore**
+
+Travel back in time! CollabCanvas includes a robust version history system with manual snapshots, autosave, and one-click restore.
+
+### Key Features
+
+**Manual Snapshots:**
+- Click "Version" button in room header
+- Add custom labels (e.g., "Before major redesign")
+- View all versions with timestamps, authors, and file sizes
+- One-click restore with automatic pre-restore backup
+
+**Autosave:**
+- Automatic snapshots every 30 seconds when content changes
+- Hash-based change detection (no duplicates when nothing changed)
+- Example: Move shape → autosave. Move it back → no duplicate.
+- Last 20 versions kept automatically
+
+**Restore Safety:**
+- Pre-restore snapshot created automatically
+- Realtime sync paused during restore (prevents conflicts)
+- Single undo entry in tldraw history
+- Toast notification: "Restored to [label]. Undo available."
+
+**Asset Persistence:**
+- Images included in snapshots via asset manifest
+- Uses immutable Firebase Storage URLs
+- Missing assets show placeholder (graceful degradation)
+- No re-upload needed on restore
+
+**Automatic Cleanup:**
+- Keep last 20 versions per room
+- Cloud Function deletes old Storage blobs automatically
+- Prunes when 21st version created
+
+### How It Works
+
+**Storage:**
+- Snapshots compressed with gzip (70-80% size reduction)
+- Stored in Firebase Storage: `/rooms/{roomId}/versions/{versionId}.json.gz`
+- Metadata in Firestore: timestamp, author, label, size, content hash
+
+**Content Hash:**
+- SHA-256 hash of visual content only (pages, shapes, assets)
+- Ignores metadata (timestamps, user IDs)
+- Prevents duplicate saves when content hasn't changed
+
+**Security:**
+- Only room members can read/write versions
+- Only creator or room owner can delete
+- Enforced via Firestore and Storage security rules
+
+### Performance
+
+- **Export snapshot**: 50-200 ms
+- **Upload (compressed)**: 100-500 ms
+- **Restore**: 200-850 ms
+- **Storage per room**: ~400 KB (20 versions)
+
+### Usage
+
+1. **Create Manual Snapshot:**
+   - Click "Version" button (top right, next to Export)
+   - Enter optional label
+   - Click "Save"
+
+2. **Restore Version:**
+   - Click "Version" → select version → click "Restore"
+   - Confirm restore
+   - Pre-restore snapshot created automatically
+   - Canvas restored, single undo available
+
+3. **Delete Version:**
+   - Only creator or room owner can delete
+   - Permanent deletion (cannot be undone)
+
+**See:** [`docs/VERSION_HISTORY.md`](./docs/VERSION_HISTORY.md) for technical details.
+
+---
+
 ## 🔄 **Conflict Resolution Strategy**
 
 CollabCanvas uses a **last-write-wins (LWW)** strategy with Firestore timestamps for conflict resolution across concurrent edits.

@@ -93,5 +93,36 @@ service cloud.firestore {
       // Allow deletion of tombstone records (for cleanup)
       allow delete: if request.auth != null;
     }
+    
+    // Version history storage
+    match /rooms/{roomId}/versions/{versionId} {
+      // Helper functions
+      function isRoomMember(roomId, userId) {
+        return get(/databases/$(database)/documents/rooms/$(roomId)/metadata/info).data.members[userId] != null;
+      }
+      
+      function isRoomOwner(roomId, userId) {
+        return get(/databases/$(database)/documents/rooms/$(roomId)/metadata/info).data.owner == userId;
+      }
+      
+      // Read: authenticated room members
+      allow read: if request.auth != null
+        && isRoomMember(roomId, request.auth.uid);
+      
+      // Create: authenticated members
+      allow create: if request.auth != null
+        && isRoomMember(roomId, request.auth.uid)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.id is string
+        && request.resource.data.roomId == roomId
+        && request.resource.data.schemaVersion is number
+        && request.resource.data.storagePath is string
+        && request.resource.data.contentHash is string;
+      
+      // Delete: only creator or room owner
+      allow delete: if request.auth != null
+        && (resource.data.createdBy == request.auth.uid
+            || isRoomOwner(roomId, request.auth.uid));
+    }
   }
 }

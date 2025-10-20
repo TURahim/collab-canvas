@@ -3,9 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   reactStrictMode: true,
-  // Next.js dev indicator position
+  // Hide Next.js dev indicator
   devIndicators: {
-    position: 'bottom-right',
+    appIsrStatus: false,
+    buildActivity: false,
   },
   // Transpile tldraw packages to fix multiple instance warning
   // This ensures tldraw libraries are bundled consistently as ES modules

@@ -393,3 +393,85 @@ export async function retryPendingUploads(
   }
 }
 
+/**
+ * Get asset manifest for a room (for snapshot)
+ * 
+ * Returns all assets with their URLs, hashes, and metadata
+ * 
+ * @param roomId - Room ID
+ * @returns Array of asset manifest entries
+ */
+export async function getAssetManifest(roomId: string): Promise<Array<{
+  id: string;
+  url: string;
+  hash?: string;
+  mime: string;
+  bytes: number;
+  createdAt: number;
+}>> {
+  try {
+    const assetsRef = collection(db, `rooms/${roomId}/assets`);
+    const snapshot = await getDocs(assetsRef);
+
+    const manifest: Array<{
+      id: string;
+      url: string;
+      hash?: string;
+      mime: string;
+      bytes: number;
+      createdAt: number;
+    }> = [];
+
+    snapshot.forEach((doc) => {
+      const data = doc.data() as AssetRecord;
+      
+      // Only include assets that are ready (have permanent URLs)
+      if (data.status === 'ready' && data.src) {
+        manifest.push({
+          id: data.id,
+          url: data.src,
+          hash: data.hash,
+          mime: data.mimeType,
+          bytes: data.size,
+          createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now(),
+        });
+      }
+    });
+
+    return manifest;
+  } catch (error) {
+    console.error('[AssetManagement] Error getting asset manifest:', error);
+    return [];
+  }
+}
+
+/**
+ * Check if an asset URL is accessible
+ * 
+ * @param url - Asset URL to check
+ * @returns True if accessible, false otherwise
+ */
+export async function checkAssetExists(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    return response.ok;
+  } catch (error) {
+    console.error('[AssetManagement] Asset check failed:', url, error);
+    return false;
+  }
+}
+
+/**
+ * Compute SHA-256 hash of a file
+ * 
+ * @param file - File to hash
+ * @returns Hex-encoded hash
+ */
+export async function computeAssetHash(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+

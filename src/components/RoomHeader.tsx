@@ -14,6 +14,7 @@ export interface RoomHeaderProps {
   userCount?: number;
   onSettingsClick: () => void;
   onExportClick: () => void;
+  onVersionClick: () => void;
   onExitClick: () => void;
 }
 
@@ -24,6 +25,7 @@ export default function RoomHeader({
   userCount = 0,
   onSettingsClick,
   onExportClick,
+  onVersionClick,
   onExitClick,
 }: RoomHeaderProps): React.JSX.Element {
   const [showCopySuccess, setShowCopySuccess] = useState(false);
@@ -109,6 +111,23 @@ export default function RoomHeader({
             <span className="hidden sm:inline">Export</span>
           </span>
         </button>
+
+        {/* Version button (owner only) */}
+        {isOwner && (
+          <button
+            onClick={onVersionClick}
+            className="rounded-lg bg-purple-50 px-3 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100 md:px-4"
+            aria-label="Version history"
+            title="Version history (owner only)"
+          >
+            <span className="flex items-center gap-2">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="hidden sm:inline">Version</span>
+            </span>
+          </button>
+        )}
 
         {/* Settings button (owner only) */}
         {isOwner && (

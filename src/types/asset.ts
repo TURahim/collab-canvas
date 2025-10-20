@@ -19,6 +19,7 @@ export interface AssetRecord {
   uploadedBy: string; // User ID who uploaded
   roomId: string; // Room where asset was uploaded
   createdAt: Timestamp;
+  hash?: string; // Optional SHA-256 hash for content-addressable storage
 }
 
 /**

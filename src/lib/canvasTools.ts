@@ -360,6 +360,7 @@ function createMultiShapeLayout(
  * @param height - Shape height (default: 150)
  * @param color - Shape color (default: 'black')
  * @returns Created shape ID
+ * @throws {Error} If editor is not provided
  */
 export interface CreateShapeParams {
   type: 'rectangle' | 'circle' | 'triangle' | 'hexagon' | 'diamond' | 'text';
@@ -445,6 +446,7 @@ export function createShape(
  * @param fontSize - Font size (default: 16)
  * @param color - Text color (default: 'black')
  * @returns Created shape ID
+ * @throws {Error} If editor is not provided
  */
 export interface CreateTextShapeParams {
     text: string;
@@ -506,6 +508,8 @@ export function createTextShape(
  * @param shapeId - ID of shape to move
  * @param deltaX - Horizontal movement distance
  * @param deltaY - Vertical movement distance
+ * @throws {Error} If editor is not provided
+ * @throws {Error} If shape with given ID not found
  */
 export interface MoveShapeParams {
   shapeId: TLShapeId;
@@ -546,6 +550,10 @@ export function moveShape(
  * @param editor - tldraw editor instance
  * @param params - Move parameters with keyword support
  * @returns Result with count, moved IDs, skipped shapes, and whether movement actually occurred
+ * @throws {Error} If editor is not provided
+ * @throws {Error} If no shapes are selected (when target='selected')
+ * @throws {Error} If no movable shapes found (all locked/invalid)
+ * @throws {Error} If neither x, y, deltaX, nor deltaY provided
  */
 export interface MoveShapeToParams {
   target: 'selected' | 'all' | TLShapeId | TLShapeId[];
@@ -701,6 +709,8 @@ function moveShapesByDelta(
  * @param scaleX - Horizontal scale factor (optional)
  * @param scaleY - Vertical scale factor (optional)
  * @param rotation - Rotation angle in degrees (optional)
+ * @throws {Error} If editor is not provided
+ * @throws {Error} If shape with given ID not found
  */
 export interface TransformShapeParams {
   shapeId: TLShapeId;
@@ -761,6 +771,8 @@ export function transformShape(
  * @param shapeIds - Array of shape IDs to arrange
  * @param pattern - Layout pattern ('horizontal', 'vertical', 'grid')
  * @param spacing - Space between shapes (default: 20)
+ * @throws {Error} If editor is not provided
+ * @throws {Error} If no shape IDs provided
  */
 export interface ArrangeShapesParams {
   shapeIds: TLShapeId[];
@@ -865,6 +877,7 @@ export function arrangeShapes(
  * @param spacing - Space between shapes (default: 20)
  * @param color - Shape color (default: 'black')
  * @returns Array of created shape IDs
+ * @throws {Error} If editor is not provided
  */
 export interface CreateGridParams {
   rows: number;

@@ -6,7 +6,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Editor } from "tldraw";
-import { exportSnapshot, computeContentHashAsync } from "./service";
+import { exportSnapshot, computeContentHash } from "./service";
 import { uploadSnapshotToStorage, generateVersionId } from "./storage";
 import { createVersionMetadata, pruneOldVersions } from "./firestore";
 import { CURRENT_SCHEMA_VERSION } from "./types";
@@ -42,7 +42,7 @@ export function useAutosave(
         const snapshot = await exportSnapshot(editor, roomId, userId);
 
         // Compute content hash
-        const contentHash = await computeContentHashAsync(snapshot);
+        const contentHash = await computeContentHash(snapshot);
 
         // Check if content has changed
         if (lastContentHashRef.current === null) {

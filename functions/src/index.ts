@@ -5,10 +5,11 @@
  */
 
 import {onDocumentDeleted} from "firebase-functions/v2/firestore";
-import * as admin from "firebase-admin";
+import {initializeApp} from "firebase-admin/app";
+import {getStorage} from "firebase-admin/storage";
 
 // Initialize Firebase Admin
-admin.initializeApp();
+initializeApp();
 
 /**
  * Cloud Function: Delete version snapshot blob when Firestore doc is deleted
@@ -30,7 +31,7 @@ export const onVersionDelete = onDocumentDeleted(
     }
 
     try {
-      const bucket = admin.storage().bucket();
+      const bucket = getStorage().bucket();
       const file = bucket.file(data.storagePath);
 
       // Check if file exists before deleting

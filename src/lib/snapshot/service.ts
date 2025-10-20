@@ -6,7 +6,7 @@
 
 import type { Editor, TLShape, TLPage, TLBinding } from "tldraw";
 import pako from "pako";
-import type { SnapshotData, AssetManifest, CameraState } from "./types";
+import type { SnapshotData, CameraState } from "./types";
 import { CURRENT_SCHEMA_VERSION, APP_VERSION } from "./types";
 import { getAssetManifest } from "../assetManagement";
 
@@ -126,7 +126,7 @@ function extractCameraState(editor: Editor): CameraState {
 }
 
 /**
- * Compute a deterministic content hash for a snapshot
+ * Compute a deterministic content hash for a snapshot (async version)
  * 
  * The hash is computed over structural content only, ignoring:
  * - Timestamps
@@ -134,9 +134,9 @@ function extractCameraState(editor: Editor): CameraState {
  * - Metadata that doesn't affect visuals
  * 
  * @param data - Snapshot data
- * @returns SHA-256 hash as hex string
+ * @returns Promise resolving to SHA-256 hash as hex string
  */
-export function computeContentHash(data: SnapshotData): string {
+export async function computeContentHash(data: SnapshotData): Promise<string> {
   // Create deterministic object with only visual content
   const contentObj = {
     pages: data.pages,
@@ -157,7 +157,7 @@ export function computeContentHash(data: SnapshotData): string {
   const jsonStr = JSON.stringify(contentObj, Object.keys(contentObj).sort());
 
   // Compute SHA-256 hash
-  const hash = computeSHA256(jsonStr);
+  const hash = await computeSHA256(jsonStr);
 
   return hash;
 }
@@ -201,35 +201,4 @@ async function computeSHA256(input: string): Promise<string> {
   return hashHex;
 }
 
-/**
- * Synchronous version of computeContentHash (returns Promise for consistency)
- * 
- * @param data - Snapshot data
- * @returns Promise resolving to content hash
- */
-export async function computeContentHashAsync(data: SnapshotData): Promise<string> {
-  // Create deterministic object with only visual content
-  const contentObj = {
-    pages: data.pages,
-    pageOrder: data.pageOrder,
-    shapes: data.shapes.map((s) => ({
-      id: s.id,
-      type: s.type,
-      x: s.x,
-      y: s.y,
-      rotation: s.rotation,
-      props: s.props,
-    })),
-    bindings: data.bindings,
-    assetIds: data.assets.map((a) => a.id).sort(),
-  };
-
-  // Stringify with sorted keys for determinism
-  const jsonStr = JSON.stringify(contentObj, Object.keys(contentObj).sort());
-
-  // Compute SHA-256 hash
-  const hash = await computeSHA256(jsonStr);
-
-  return hash;
-}
 

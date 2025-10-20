@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from "react";
 import type { Editor } from "tldraw";
-import { exportSnapshot, computeContentHashAsync } from "../lib/snapshot/service";
+import { exportSnapshot, computeContentHash } from "../lib/snapshot/service";
 import { uploadSnapshotToStorage, generateVersionId } from "../lib/snapshot/storage";
 import {
   listVersions,
@@ -108,7 +108,7 @@ export default function VersionHistoryModal({
       const snapshot = await exportSnapshot(editor, roomId, userId);
 
       // Compute content hash
-      const contentHash = await computeContentHashAsync(snapshot);
+      const contentHash = await computeContentHash(snapshot);
 
       // Generate version ID
       const versionId = generateVersionId();
@@ -223,7 +223,7 @@ export default function VersionHistoryModal({
       // 1. Create pre-restore snapshot
       console.log("[VersionHistory] Creating pre-restore snapshot...");
       const preRestoreSnapshot = await exportSnapshot(currentEditor, roomId, userId);
-      const preRestoreHash = await computeContentHashAsync(preRestoreSnapshot);
+      const preRestoreHash = await computeContentHash(preRestoreSnapshot);
       const preRestoreId = generateVersionId();
       const preRestorePath = await uploadSnapshotToStorage(
         roomId,

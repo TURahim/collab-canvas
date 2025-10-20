@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import type { Editor } from "tldraw";
+import type { Editor } from "@tldraw/tldraw";
 import { exportSnapshot, computeContentHash } from "./service";
 import { uploadSnapshotToStorage, generateVersionId } from "./storage";
 import { createVersionMetadata, pruneOldVersions } from "./firestore";

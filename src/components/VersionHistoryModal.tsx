@@ -7,7 +7,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Editor } from "tldraw";
+import type { Editor } from "@tldraw/tldraw";
 import { exportSnapshot, computeContentHash } from "../lib/snapshot/service";
 import { uploadSnapshotToStorage, generateVersionId } from "../lib/snapshot/storage";
 import {

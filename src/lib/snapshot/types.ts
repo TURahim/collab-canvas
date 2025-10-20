@@ -4,7 +4,7 @@
  * Defines the structure for snapshots, asset manifests, and version metadata
  */
 
-import type { TLShape, TLPage, TLBinding } from "tldraw";
+import type { TLShape, TLPage, TLBinding } from "@tldraw/tldraw";
 
 /**
  * Asset manifest entry - records all metadata for an asset at snapshot time

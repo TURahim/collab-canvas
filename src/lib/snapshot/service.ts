@@ -4,7 +4,7 @@
  * Core functions for exporting, importing, hashing, and compressing snapshots
  */
 
-import type { Editor, TLShape, TLPage, TLBinding } from "tldraw";
+import type { Editor, TLShape, TLPage, TLBinding } from "@tldraw/tldraw";
 import pako from "pako";
 import type { SnapshotData, CameraState } from "./types";
 import { CURRENT_SCHEMA_VERSION, APP_VERSION } from "./types";
